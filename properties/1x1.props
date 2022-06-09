@@ -1,0 +1,27 @@
+snd.sim.seed: 1
+snd.sim.number_of_introducer_rows: 1
+snd.sim.number_of_introducer_cols: 1
+snd.sim.introducer_fanout: 1
+snd.sim.number_of_servers: 1
+snd.sim.number_of_clients: 1
+snd.sim.sensorFP: 0.0
+snd.sim.sensorFN: 0.0
+snd.number_of_threads: 1
+
+# Should average one msg per second (?)
+snd.sim.client_traffic_exponential: 0.001
+
+# Divide by 1000 to get number of seconds
+snd.sim.end_time: 200000
+
+# Configure the threshold controller
+snd.thold_ctlr.sensor_smoothing_alpha: 0.1
+snd.thold_ctlr.K: 30.0
+snd.thold_ctlr.tau_i: 60.0
+snd.thold_ctlr.tau_t: 0.05
+
+# Configure the discovery service
+#
+# In the simulation use a huge cache, because the nodes
+# all share the discovery service instance
+snd.discover_service.cache_size: 1000000
