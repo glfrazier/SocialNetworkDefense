@@ -12,20 +12,79 @@ public class SNDMessage extends Message {
 
 	private static final long serialVersionUID = 1L;
 
+	protected MessageType type;
+
+	public enum MessageType {
+		/**
+		 * A message from the requester to the introducer of the introduction,
+		 * requesting to be introduced
+		 */
+		INTRODUCTION_REQUEST,
+
+		/**
+		 * A message from the introducer to the target of the introduction, offering the
+		 * introduction
+		 */
+		INTRODUCTION_OFFER,
+
+		/**
+		 * A message from the target of an introduction to the introducer refusing the
+		 * introduction
+		 */
+		INTRODUCTION_REFUSED,
+
+		/**
+		 * A message from the target to the introducer, accepting the introduction
+		 */
+		INTRODUCTION_ACCEPTED,
+
+		/**
+		 * A message from the introducer to the requester, completing the accepted
+		 * introduction
+		 */
+		INTRODUCTION_COMPLETED,
+
+		/**
+		 * A message from the introducer to the requester, denying the introduction
+		 * either because the target of the introduction refused the offer or because
+		 * the introducer refused to make the offer
+		 */
+		INTRODUCTION_DENIED,
+
+		/**
+		 * A message from an introducer to the requester, denying the introduction BUT
+		 * announcing the ability to route to the destination. This will typically be
+		 * sent by a server proxy (because the proxied-for app server does not
+		 * participate in the SND protocol), but technically this could occur at any
+		 * point in the topology.
+		 */
+		INTRODUCTION_DENIED_WILL_ROUTE,
+
+		/**
+		 * Send/receive feedback about a transaction
+		 */
+		FEEDBACK
+	};
+
 	private final IntroductionRequest req;
 
 	public SNDMessage(InetAddress dst, InetAddress src, IntroductionRequest req, MessageType type) {
-		super(dst, src, type);
+		super(dst, src);
 		this.req = req;
+		this.type = type;
 	}
 
+	public MessageType getType() {
+		return type;
+	}
+	
 	public IntroductionRequest getIntroductionRequest() {
 		return req;
 	}
 
 	@Override
 	public String toString() {
-		return super.toString() + "(" + req + ")";
+		return super.toString(type.toString()) + "(" + req + ")";
 	}
 
 //	public static class IntroSequenceID implements Serializable {

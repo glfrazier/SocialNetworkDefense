@@ -5,11 +5,10 @@ import java.net.InetAddress;
 import java.util.Properties;
 
 import com.github.glfrazier.event.EventingSystem;
-import com.github.glfrazier.snd.protocol.message.ClientAppMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedWillRouteMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionRequestMessage;
-import com.github.glfrazier.snd.protocol.message.ServerAppMessage;
+import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.Router;
 import com.github.glfrazier.snd.util.VPN;
 import com.github.glfrazier.snd.util.VPNFactory;
@@ -82,8 +81,19 @@ public class ServerProxy extends SNDNode {
 		}
 	}
 
-	protected void processClientToServer(ClientAppMessage m, VPN vpn) {
+	@Override
+	protected void processMessage(Message m, VPN vpn) {
+		if (vpn == vpnToAppServer) {
+			processServerToClient(m, vpn);
+		} else {
+			processClientToServer(m, vpn);
+		}
+	}
+
+	protected void processClientToServer(Message m, VPN vpn) {
 		if (!vpnToAppServer.getRemote().equals(m.getDst())) {
+			// Why are we preventing the app server from routing the message (packet)
+			// onward?
 			System.err.println(this + " received a ClientApp msg addressed to " + m.getDst() + ", but our appServer is "
 					+ vpnToAppServer.getRemote());
 			System.exit(-1);
@@ -97,7 +107,7 @@ public class ServerProxy extends SNDNode {
 		router.addRoute(m.getSrc(), vpn);
 	}
 
-	protected void processServerToClient(ServerAppMessage m, VPN vpnIn) {
+	protected void processServerToClient(Message m, VPN vpnIn) {
 		if (vpnIn != vpnToAppServer) {
 			System.err.println("Invariant Violation! Received a ServerAppMessage on VPN " + vpnIn);
 			new Exception().printStackTrace();
@@ -106,6 +116,7 @@ public class ServerProxy extends SNDNode {
 		VPN vpnOut = router.getRouteTo(m.getDst());
 		if (vpnOut == null) {
 			System.err.println("We do not have a VPN to forward " + m + " onto.");
+			return;
 		}
 		try {
 			vpnOut.send(m);

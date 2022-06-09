@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 
 import com.github.glfrazier.snd.protocol.message.Message;
-import com.github.glfrazier.snd.protocol.message.ServerAppMessage;
 import com.github.glfrazier.snd.util.VPN;
 import com.github.glfrazier.snd.util.VPNEndpoint;
 
@@ -35,8 +34,8 @@ public class TrafficReceiver implements VPNEndpoint {
 
 	@Override
 	public void receive(Message m, VPN vpn) {
-		ServerAppMessage response = new ServerAppMessage(m.getSrc(), getAddress(), "Response!");
-		System.out.println(sim.getCurrentTime() + ":\t" + this + " received " + m + " and is responding with " + response);
+		Message response = new Message(m.getSrc(), getAddress(), "Response!");
+		sim.printEvent(this + " received " + m + " and is responding with " + response);
 		try {
 			vpnToServer.send(response);
 		} catch (IOException e) {

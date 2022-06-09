@@ -13,17 +13,16 @@ import java.util.logging.Logger;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.Pedigree;
-import com.github.glfrazier.snd.protocol.message.ClientAppMessage;
 import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionAcceptedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionCompletedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedMessage;
+import com.github.glfrazier.snd.protocol.message.IntroductionDeniedWillRouteMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionOfferMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionRefusedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.SNDMessage;
-import com.github.glfrazier.snd.protocol.message.ServerAppMessage;
 import com.github.glfrazier.snd.util.Communicator;
 import com.github.glfrazier.snd.util.DiscoveryService;
 import com.github.glfrazier.snd.util.PropertyParser;
@@ -167,15 +166,17 @@ public class SNDNode implements Communicator {
 
 	@Override
 	public void receive(Message m, VPN vpn) {
-		switch (m.getType()) {
-		case CLIENT_TO_SERVER:
-			processClientToServer((ClientAppMessage) m, vpn);
-			break;
-		case SERVER_TO_CLIENT:
-			processServerToClient((ServerAppMessage) m, vpn);
-			break;
+		if (!(m instanceof SNDMessage)) {
+			processMessage(m, vpn);
+			return;
+		}
+		SNDMessage msg = (SNDMessage)m;
+		switch (msg.getType()) {
 		case INTRODUCTION_DENIED:
 			processIntroductionDenied((IntroductionDeniedMessage) m);
+			break;
+		case INTRODUCTION_DENIED_WILL_ROUTE:
+			processIntroductionDeniedWillRoute((IntroductionDeniedWillRouteMessage) m);
 			break;
 		case INTRODUCTION_COMPLETED:
 			processIntroductionCompleted((IntroductionCompletedMessage) m);
@@ -202,30 +203,30 @@ public class SNDNode implements Communicator {
 	protected void processIntroductionCompleted(IntroductionCompletedMessage m) {
 		// ClientImpl overrides receive(). So, we should never encounter an Introduction
 		// Completed message here.
-		new Exception("This method should never be invoked!").printStackTrace();
+		new Exception(this + ": This method should never be invoked!").printStackTrace();
 		System.exit(-1);
 	}
 
 	protected void processIntroductionDenied(IntroductionDeniedMessage m) {
 		// ClientImpl overrides receive(). So, we should never encounter an Introduction
 		// Completed message here.
-		new Exception("This method should never be invoked!").printStackTrace();
+		new Exception(this + ": This method should never be invoked!").printStackTrace();
 		System.exit(-1);
 	}
 
-	protected void processServerToClient(ServerAppMessage m, VPN vpn) {
-		// ClientImpl overrides receive(), ServerImpl overrides this method, and
-		// IntroducerImpl should never see application-level messages.
-		new Exception("This method should never be invoked!").printStackTrace();
+	protected void processIntroductionDeniedWillRoute(IntroductionDeniedWillRouteMessage m) {
+		// ClientImpl overrides receive(). So, we should never encounter an Introduction
+		// Completed message here.
+		new Exception(this + ": This method should never be invoked!").printStackTrace();
 		System.exit(-1);
 	}
 
-	protected void processClientToServer(ClientAppMessage m, VPN vpn) {
-		// ClientImpl overrides receive(), ServerImpl overrides this method, and
-		// IntroducerImpl should never see application-level messages.
-		new Exception("This method should never be invoked!").printStackTrace();
+	protected void processMessage(Message m, VPN vpn) {
+		// ClientImpl and ServerImpl override this method.
+		new Exception(this + ": This method should never be invoked!").printStackTrace();
 		System.exit(-1);
 	}
+
 
 	protected void processFeedback(FeedbackMessage m) {
 		IntroductionRequest req = m.getIntroductionRequest();

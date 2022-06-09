@@ -4,7 +4,7 @@ import java.net.InetAddress;
 
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.snd.node.ClientProxy;
-import com.github.glfrazier.snd.protocol.message.ClientAppMessage;
+import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.VPN;
 import com.github.glfrazier.statemachine.EventImpl;
 import com.github.glfrazier.statemachine.State;
@@ -28,7 +28,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 	private static final Event NEXT_STEP = new EventImpl<RequestProtocol>(null, "next_step");
 	private static final Event CONNECTED = new EventImpl<RequestProtocol>(null, "connected");
 	private static final Event FAILURE = new EventImpl<RequestProtocol>(null, "failure");
-	private ClientAppMessage message;
+	private Message message;
 	private ClientProxy requester;
 	private IntroductionRequest request;
 	private VPN nextVPN;
@@ -39,7 +39,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 	
 	private InetAddress proxyAddress;
 
-	public ClientConnectToServerProtocol(ClientProxy client, ClientAppMessage m) {
+	public ClientConnectToServerProtocol(ClientProxy client, Message m) {
 		super("Introduction Sequence: " + m.getSrc() + " ==> " + m.getDst(), EventEqualityMode.CLASS_EQUALS);
 		this.message = m;
 		this.requester = client;
@@ -64,7 +64,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 		return nextVPN;
 	}
 
-	public ClientAppMessage getMessage() {
+	public Message getMessage() {
 		return message;
 	}
 

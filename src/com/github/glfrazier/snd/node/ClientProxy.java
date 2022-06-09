@@ -10,11 +10,8 @@ import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.protocol.ClientConnectToServerProtocol;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.RequestProtocol;
-import com.github.glfrazier.snd.protocol.message.ClientAppMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
-import com.github.glfrazier.snd.protocol.message.Message.MessageType;
 import com.github.glfrazier.snd.protocol.message.SNDMessage;
-import com.github.glfrazier.snd.protocol.message.ServerAppMessage;
 import com.github.glfrazier.snd.util.VPN;
 import com.github.glfrazier.snd.util.VPNEndpoint;
 import com.github.glfrazier.snd.util.VPNFactory;
@@ -66,44 +63,50 @@ public class ClientProxy extends SNDNode //
 	}
 
 	@Override
-	public synchronized void receive(Message m, VPN vpn) {
-		if (vpnToUser.equals(vpn)) {
-			if (!(m instanceof ClientAppMessage)) {
-				System.err.println(this + " only expect to receive ClientAppMessages on from the user!");
-				System.exit(-1);
-			}
-			ClientAppMessage appMsg = (ClientAppMessage) m;
-			ClientConnectToServerProtocol proto = new ClientConnectToServerProtocol(this, appMsg);
+	public void receive(Message m, VPN vpn) {
+		if (!(m instanceof SNDMessage)) {
+			processMessage(m, vpn);
+			return;
+		}
+		SNDMessage msg = (SNDMessage) m;
+		RequestProtocol proto = introductionSequences.get(msg.getIntroductionRequest());
+		if (proto == null) {
+			throw new IllegalStateException("Received an SND message for a protocol that does not exist!");
+		}
+		proto.receive(msg);
+	}
+
+	@Override
+	public synchronized void processMessage(Message m, VPN vpn) {
+		if (vpn == vpnToUser) {
+			// The message came from the client that this node is proxying for
+			ClientConnectToServerProtocol proto = new ClientConnectToServerProtocol(this, m);
 			proto.registerCallback(this);
 			proto.begin();
 			return;
-		}
-		if (m.getType() == MessageType.SERVER_TO_CLIENT) {
-			processServerResponse((ServerAppMessage) m, vpn);
-			return;
-		}
-		if (m instanceof SNDMessage) {
-			SNDMessage ntdm = (SNDMessage) m;
-			RequestProtocol proto = introductionSequences.get(ntdm.getIntroductionRequest());
-			if (proto == null) {
-				throw new IllegalStateException("Received a message for a protocol that does not exist!");
+		} else {
+			// The message came from the network, and should be forwarded to the proxied
+			// node.
+			if (!m.getDst().equals(vpnToUser.getRemote())) {
+				// Right now, we are not allowing the proxied-for host to itself be routing
+				// packets. Why?
+				System.err.println(this
+						+ ": Received a non-protocol message that is neither from nor to the attached App Client. Ignoring it.");
+				return;
 			}
-			proto.receive(ntdm);
-			return;
+			try {
+				vpnToUser.send(m);
+			} catch (IOException e) {
+				System.err.println("Transmission to userApp should never fail!");
+				e.printStackTrace();
+			}
+			// TODO This is probably the wrong place to determine when to close an ephemeral
+			// VPN.
+			// And we certainly should not do so simply because we sent a Message (packet?)
+			// to
+			// the application client.
+			closeVPN(vpn.getRemote());
 		}
-		throw new IllegalArgumentException("Received " + m + " on VPN " + vpn + ": what does it mean!?");
-	}
-
-	private void processServerResponse(ServerAppMessage m, VPN vpn) {
-		try {
-			vpnToUser.send(m);
-		} catch (IOException e) {
-			System.err.println("Transmission to userApp should never fail!");
-			e.printStackTrace();
-		}
-		// TODO This is the wrong place to determine when a transaction is completed.
-		// There should be a CLOSE message from the AppClient or the AppServer.
-		closeVPN(vpn.getRemote());
 	}
 
 	public InetAddress getInitialIntroducer() {
@@ -118,7 +121,7 @@ public class ClientProxy extends SNDNode //
 			return;
 		}
 		VPN vpn = proto.getServerVPN();
-		ClientAppMessage m = proto.getMessage();
+		Message m = proto.getMessage();
 		try {
 			vpn.send(m);
 		} catch (IOException e) {
@@ -126,7 +129,7 @@ public class ClientProxy extends SNDNode //
 			return;
 		}
 	}
-	
+
 	@Override
 	public String toString() {
 		return "ClientProxy-" + getAddress();

@@ -15,6 +15,8 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 
+import com.github.glfrazier.event.Event;
+import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.ClientProxy;
 import com.github.glfrazier.snd.node.SNDNode;
@@ -75,6 +77,7 @@ public class Simulation {
 		long endTime = getLongProperty("snd.sim.end_time");
 		eventingSystem.setEndTime(endTime);
 		System.out.println("Simulation will end at time " + endTime);
+		System.out.println("===========================================");
 
 		// build the introducer network
 		Map<InetAddress, SNDNode> introducerMap = new HashMap<>();
@@ -317,6 +320,11 @@ public class Simulation {
 				System.err.println(threads[i].toString() + " was interrupted: " + e);
 			}
 		}
+		printEvent("The simulation has ended.");
+	}
+	
+	public void printEvent(String msg) {
+		System.out.println(String.format("%10.3f: %s", ((float)eventingSystem.getCurrentTime())/1000.0, msg));
 	}
 
 	public long getSeed() {

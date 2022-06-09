@@ -1,4 +1,9 @@
+# By specifying the seed, we are making the simulation
+# deterministic. In general, you do not want to specify
+# the seed.
+#
 snd.sim.seed: 1
+
 snd.sim.number_of_introducer_rows: 1
 snd.sim.number_of_introducer_cols: 1
 snd.sim.introducer_fanout: 1
