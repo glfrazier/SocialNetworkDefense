@@ -1,16 +1,12 @@
 package com.github.glfrazier.snd.util;
 
-import java.io.IOException;
-import java.net.InetAddress;
-
-import com.github.glfrazier.snd.protocol.message.Message;
-
+/**
+ * A tagging interface for the object returned by a VPNFactory implementation.
+ * 
+ * @see VPNFactory#createVPN(java.net.InetAddress, Object)
+ * @see VPNFactory#createIntroducedVPN(java.net.InetAddress,
+ *      com.github.glfrazier.snd.protocol.IntroductionRequest, Object)
+ */
 public interface VPN {
-	
-	public void send(Message m) throws IOException;
-	
-	public InetAddress getRemote();
-	
-	public void close();
 
 }

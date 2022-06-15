@@ -17,7 +17,7 @@ public class AddressUtils {
 	}
 	public static InetAddress ZERO_IPv6_ADDRESS;
 	static {
-		final byte[] SIXTEEN_ZEROS = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
+		final byte[] SIXTEEN_ZEROS = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 		try {
 			ZERO_IPv6_ADDRESS = InetAddress.getByAddress(SIXTEEN_ZEROS);
 		} catch (UnknownHostException e) {
@@ -46,5 +46,20 @@ public class AddressUtils {
 			System.exit(-1);
 		}
 		return result;
+	}
+
+	public static int compare(InetAddress a1, InetAddress a2) {
+		byte[] b1 = a1.getAddress();
+		byte[] b2 = a2.getAddress();
+		int result = Integer.compare(b1.length, b2.length);
+		if (result != 0) {
+			return result;
+		}
+		for (int i = 0; i < b1.length; i++) {
+			result = Byte.compare(b1[i], b2[i]);
+			if (result != 0)
+				return result;
+		}
+		return 0;
 	}
 }

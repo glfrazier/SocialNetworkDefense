@@ -32,4 +32,9 @@ public class IntroductionOfferMessage extends SNDMessage implements Serializable
 		return pedigree;
 	}
 
+	public Object getKeyingMaterial() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
 }

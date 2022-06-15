@@ -20,8 +20,12 @@ public class IntroductionCompletedMessage extends SNDMessage implements Serializ
 		this.nextStep = target;
 	}
 
-	public InetAddress getNextStep() {
+	public InetAddress getNewNeighbor() {
 		return nextStep;
+	}
+
+	public Object getKeyingMaterial() {
+		return null;
 	}
 
 }

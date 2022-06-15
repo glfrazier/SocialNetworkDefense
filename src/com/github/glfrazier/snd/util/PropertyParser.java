@@ -51,4 +51,11 @@ public class PropertyParser {
 		// unreachable code
 		return 0;
 	}
+
+	public static boolean getBooleanProperty(String propName, boolean defaultValue, Properties properties) {
+		if (!properties.containsKey(propName)) {
+			return defaultValue;
+		}
+		return properties.getProperty(propName).equalsIgnoreCase("true");
+	}
 }

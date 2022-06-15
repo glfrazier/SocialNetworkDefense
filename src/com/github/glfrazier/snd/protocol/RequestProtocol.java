@@ -4,11 +4,11 @@ import java.io.IOException;
 import java.net.InetAddress;
 
 import com.github.glfrazier.event.Event;
+import com.github.glfrazier.snd.node.SNDNode;
 import com.github.glfrazier.snd.protocol.message.IntroductionCompletedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedWillRouteMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionRequestMessage;
-import com.github.glfrazier.snd.util.Communicator;
 import com.github.glfrazier.snd.util.VPN;
 import com.github.glfrazier.statemachine.EventImpl;
 import com.github.glfrazier.statemachine.State;
@@ -40,26 +40,26 @@ import com.github.glfrazier.statemachine.Transition;
  * ({@link #registerCallback(StateMachineTracker)}). Any incoming SND messages
  * that have this UUID are passed to the {@link #receive(Event)} method. When
  * {@link StateMachineTracker#stateMachineEnded(StateMachine)} is invoked, the
- * owner can call {@link #vpnWasCreated()} to see if a VPN was created and
- * {@link #getResultingVPN()} to get the VPN, or {@link #routeIsAvailable()} to
+ * owner can call {@link #introductionSucceeded()} to see if a VPN was created and
+ * {@link #getResultingNeighbor()} to get the VPN, or {@link #routeIsAvailable()} to
  * see if a route is available and {@link #getIntroducer()} to get the IP
  * address of the node that will route to the destination.
  */
 public class RequestProtocol extends StateMachine {
 
-	private final Communicator requester;
+	private final SNDNode requester;
 	private final IntroductionRequest request;
+	private InetAddress target;
 
-	private VPN resultingVPN;
 	private State successState;
 	private State routeAvailableState;
 
 	public static final Event TIMEOUT_EVENT = new EventImpl<>(TIMEOUT);
 	public static final Event FAILURE_EVENT = new EventImpl<>("FAILURE");
 
-	public RequestProtocol(Communicator requester, IntroductionRequest request) {
+	public RequestProtocol(SNDNode requester, IntroductionRequest request, boolean verbose) {
 		super("RequestProtocol:" + request, EventEqualityMode.CLASS_EQUALS);
-		//this.verbose = true;
+		this.verbose = verbose;
 		this.requester = requester;
 		this.request = request;
 		State sendRequestState = new State("Send Request", createIntroductionRequestAction(this));
@@ -78,15 +78,11 @@ public class RequestProtocol extends StateMachine {
 		addTransition(t);
 	}
 
-	private Communicator getRequester() {
-		return requester;
-	}
-
 	public InetAddress getIntroducer() {
 		return request.introducer;
 	}
 
-	public boolean vpnWasCreated() {
+	public boolean introductionSucceeded() {
 		return this.getCurrentState() == successState;
 	}
 
@@ -94,41 +90,39 @@ public class RequestProtocol extends StateMachine {
 		return this.getCurrentState() == routeAvailableState;
 	}
 
-	public VPN getResultingVPN() {
-		return resultingVPN;
+	public InetAddress getResultingNeighbor() {
+		return target;
 	}
 
-	public static State.Action createIntroductionRequestAction(RequestProtocol sm) {
+	public State.Action createIntroductionRequestAction(RequestProtocol requestProtocol) {
 		return new State.Action() {
 			@Override
 			public void act(State s, Event e) {
-				IntroductionRequestMessage req = new IntroductionRequestMessage(sm.request);
-				VPN vpn = sm.getRequester().getVPN(req.getIntroductionRequest().introducer);
+				IntroductionRequestMessage req = new IntroductionRequestMessage(requestProtocol.request);
 				try {
-					vpn.send(req);
+					requester.getImplementation().getComms().send(req);
 				} catch (IOException e1) {
-					sm.receive(FAILURE_EVENT);
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+					requestProtocol.receive(FAILURE_EVENT);
 				}
 			}
 		};
 	}
 
-	private static State.Action createIntroductionSuccessAction(RequestProtocol sm) {
+	private State.Action createIntroductionSuccessAction(RequestProtocol requestProtocol) {
 
 		return new State.Action() {
 			@Override
 			public void act(State s, Event e) {
 				IntroductionCompletedMessage successMsg = (IntroductionCompletedMessage) e;
-				InetAddress n = successMsg.getNextStep();
-				VPN vpn = null;
+				target = successMsg.getNewNeighbor();
 				try {
-					vpn = sm.getRequester().openVPN(n, sm.request);
-				} catch (IOException exn) {
-					System.err.println("Exception msg: " + exn + " -- Did we already have a VPN open!?");
-					exn.printStackTrace();
-					System.exit(-1);
+					requester.getImplementation().getComms().openIntroducedVPN(target, request, successMsg.getKeyingMaterial());
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
 				}
-				sm.resultingVPN = vpn;
 			}
 		};
 	}

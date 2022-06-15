@@ -12,31 +12,33 @@ import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.RequestProtocol;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.SNDMessage;
-import com.github.glfrazier.snd.util.VPN;
-import com.github.glfrazier.snd.util.VPNEndpoint;
-import com.github.glfrazier.snd.util.VPNFactory;
-import com.github.glfrazier.statemachine.StateMachine;
-import com.github.glfrazier.statemachine.StateMachine.StateMachineTracker;
+import com.github.glfrazier.snd.protocol.message.WrappedMessage;
+import com.github.glfrazier.snd.util.Implementation;
 
-public class ClientProxy extends SNDNode //
-		implements VPNEndpoint, StateMachineTracker {
+public class ClientProxy extends SNDNode //implements StateMachineTracker
+		
+{
 
-	private VPN vpnToUser;
+	private InetAddress proxiedAppClient;
 	private InetAddress initialIntroducer;
 	private Map<IntroductionRequest, RequestProtocol> introductionSequences = new HashMap<>();
 
-	public ClientProxy(InetAddress addr, VPNFactory vpnFactory, EventingSystem es, Properties props) {
-		super(addr, vpnFactory, null, // clients do not need discovery
-				es, props);
+	public ClientProxy(InetAddress addr, Implementation impl, EventingSystem es, Properties props) {
+		super(addr, impl, es, props);
 	}
 
-	public void connectAppClient(InetAddress app) {
-		// Note that we are not using the ImplBase class' VPN management logic for the
-		// vpn to the user/app.
-		if (vpnToUser != null) {
-			vpnToUser.close();
+	public synchronized void connectAppClient(InetAddress app) throws IOException {
+		if (proxiedAppClient != null) {
+			proxiedAppClient = null;
+			implementation.getComms().closeVPN(proxiedAppClient);
 		}
-		vpnToUser = vpnFactory.createVPN(app);
+		try {
+			implementation.getComms().openVPN(app, null);
+			proxiedAppClient = app;
+		} catch (IOException e) {
+			e.printStackTrace();
+			System.exit(-1);
+		}
 	}
 
 	/**
@@ -49,13 +51,15 @@ public class ClientProxy extends SNDNode //
 	 */
 	public void connectInitialIntroducer(InetAddress introducer) {
 		if (initialIntroducer != null) {
-			closeVPN(initialIntroducer);
+			try {
+				implementation.getComms().closeVPN(initialIntroducer);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
 		this.initialIntroducer = introducer;
 		try {
-			// Access the superclass' implementation of openVPN, avoiding our local
-			// implementation.
-			super.openVPN(introducer);
+			implementation.getComms().openVPN(introducer, null);
 		} catch (IOException e) {
 			e.printStackTrace();
 			System.exit(-1);
@@ -63,9 +67,9 @@ public class ClientProxy extends SNDNode //
 	}
 
 	@Override
-	public void receive(Message m, VPN vpn) {
+	public void receive(Message m) {
 		if (!(m instanceof SNDMessage)) {
-			processMessage(m, vpn);
+			processMessage(m);
 			return;
 		}
 		SNDMessage msg = (SNDMessage) m;
@@ -77,58 +81,62 @@ public class ClientProxy extends SNDNode //
 	}
 
 	@Override
-	public synchronized void processMessage(Message m, VPN vpn) {
-		if (vpn == vpnToUser) {
+	public synchronized void processMessage(Message m) {
+		if (m instanceof WrappedMessage) {
+			Message enc = ((WrappedMessage) m).getEnclosedMessage();
+			if (enc.getDst().equals(proxiedAppClient)) {
+				// TODO This is probably the wrong place to determine when to close an ephemeral
+				// VPN. And we certainly should not do so simply because we sent a Message
+				// (packet?) to the application client.
+				try {
+					System.out.println(this + " closing connection to " + m.getSrc());
+					implementation.getComms().closeIntroducedVPN(m.getSrc());
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				try {
+					implementation.getComms().send(enc);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			} else {
+
+			}
+		} else if (m.getSrc().equals(proxiedAppClient)) {
 			// The message came from the client that this node is proxying for
-			ClientConnectToServerProtocol proto = new ClientConnectToServerProtocol(this, m);
-			proto.registerCallback(this);
+			ClientConnectToServerProtocol proto = new ClientConnectToServerProtocol(this, m, this.verbose);
+			// No need to register a callback, as the protocol handles sending the message.
+			// proto.registerCallback(this);
 			proto.begin();
 			return;
 		} else {
-			// The message came from the network, and should be forwarded to the proxied
-			// node.
-			if (!m.getDst().equals(vpnToUser.getRemote())) {
-				// Right now, we are not allowing the proxied-for host to itself be routing
-				// packets. Why?
-				System.err.println(this
-						+ ": Received a non-protocol message that is neither from nor to the attached App Client. Ignoring it.");
-				return;
-			}
-			try {
-				vpnToUser.send(m);
-			} catch (IOException e) {
-				System.err.println("Transmission to userApp should never fail!");
-				e.printStackTrace();
-			}
-			// TODO This is probably the wrong place to determine when to close an ephemeral
-			// VPN.
-			// And we certainly should not do so simply because we sent a Message (packet?)
-			// to
-			// the application client.
-			closeVPN(vpn.getRemote());
+			new Exception("We should not be here!").printStackTrace();
 		}
+
 	}
 
 	public InetAddress getInitialIntroducer() {
 		return initialIntroducer;
 	}
 
-	@Override
-	public void stateMachineEnded(StateMachine machine) {
-		ClientConnectToServerProtocol proto = (ClientConnectToServerProtocol) machine;
-		if (!proto.isConnected()) {
-			// TODO do something about a failure
-			return;
-		}
-		VPN vpn = proto.getServerVPN();
-		Message m = proto.getMessage();
-		try {
-			vpn.send(m);
-		} catch (IOException e) {
-			// TODO do something about a failure
-			return;
-		}
-	}
+//  No need to register a callback, as the protocol handles sending the message.
+//	@Override
+//	public void stateMachineEnded(StateMachine machine) {
+//		ClientConnectToServerProtocol proto = (ClientConnectToServerProtocol) machine;
+//		if (!proto.isConnected()) {
+//			// TODO do something about a failure
+//			return;
+//		}
+//		Message m = proto.getMessage();
+//		try {
+//			implementation.getComms().send(m);
+//		} catch (IOException e) {
+//			// TODO do something about a failure
+//			return;
+//		}
+//	}
 
 	@Override
 	public String toString() {

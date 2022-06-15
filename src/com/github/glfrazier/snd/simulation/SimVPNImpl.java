@@ -9,10 +9,11 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
+import com.github.glfrazier.snd.node.MessageReceiver;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.message.Message;
+import com.github.glfrazier.snd.util.AddressUtils;
 import com.github.glfrazier.snd.util.VPN;
-import com.github.glfrazier.snd.util.VPNEndpoint;
 
 public class SimVPNImpl implements VPN, EventProcessor {
 
@@ -20,8 +21,16 @@ public class SimVPNImpl implements VPN, EventProcessor {
 
 	private static final AtomicLong INDEX = new AtomicLong(0);
 
+	private static final Event CLOSE_VPN_EVENT = new Event() {
+		private final String name = "Close VPN Event";
+
+		public String toString() {
+			return name;
+		}
+	};
+
 	private final long uuid;
-	private final VPNEndpoint local;
+	private final MessageReceiver local;
 	private final InetAddress remote;
 	private SimVPNImpl remoteVPN;
 	private final IntroductionRequest introductionRequest;
@@ -32,7 +41,9 @@ public class SimVPNImpl implements VPN, EventProcessor {
 
 	private boolean connected;
 
-	public SimVPNImpl(VPNEndpoint local, InetAddress remote, EventingSystem es,
+	private String stringRep;
+
+	public SimVPNImpl(MessageReceiver local, InetAddress remote, EventingSystem es,
 			Map<InetAddress, Map<InetAddress, SimVPNImpl>> simulationVPNMap) {
 		uuid = INDEX.getAndIncrement();
 		this.local = local;
@@ -52,11 +63,12 @@ public class SimVPNImpl implements VPN, EventProcessor {
 				vpnMap.put(remote, this);
 			}
 		}
+		stringRep = "LongLived{" + local.getAddress() + "<==>" + remote + "}";
 		connect();
 	}
 
-	public SimVPNImpl(VPNEndpoint local, InetAddress remote, IntroductionRequest introReq, EventingSystem eventingSystem,
-			Map<InetAddress, Map<IntroductionRequest, SimVPNImpl>> ephemeralVPNMap) {
+	public SimVPNImpl(MessageReceiver local, InetAddress remote, IntroductionRequest introReq,
+			EventingSystem eventingSystem, Map<InetAddress, Map<IntroductionRequest, SimVPNImpl>> ephemeralVPNMap) {
 		uuid = INDEX.getAndIncrement();
 		this.local = local;
 		this.remote = remote;
@@ -75,6 +87,7 @@ public class SimVPNImpl implements VPN, EventProcessor {
 				vpnMap.put(introReq, this);
 			}
 		}
+		stringRep = "Introduced{" + local.getAddress() + "<==>" + remote + "}";
 		connect();
 	}
 
@@ -89,7 +102,6 @@ public class SimVPNImpl implements VPN, EventProcessor {
 		return uuid == ((SimVPNImpl) o).uuid;
 	}
 
-	@Override
 	public void send(Message m) throws IOException {
 		if (!connected) {
 			connect();
@@ -142,24 +154,43 @@ public class SimVPNImpl implements VPN, EventProcessor {
 		if (closed) {
 			throw new IOException("receive(Message) invoked on closed VPN.");
 		}
-		local.receive(m, this);
+		local.receive(m);
 	}
 
-	@Override
 	public InetAddress getRemote() {
 		return remote;
 	}
 
-	@Override
-	public synchronized void close() {
+	public void close() {
+		System.out.println(local + " closing " + this);
 		if (closed) {
 			return;
 		}
-		synchronized (simulationVPNMap) {
-			Map<InetAddress, SimVPNImpl> vpnMap = simulationVPNMap.get(local.getAddress());
-			vpnMap.remove(remote);
+		// Schedule this VPN to be closed after a recently-transmitted message might be
+		// received
+		eventingSystem.scheduleEventRelative(this, CLOSE_VPN_EVENT, MESSAGE_LATENCY + 1);
+	}
+
+	private synchronized void privateClose(boolean first) {
+		if (closed) {
+			return;
+		}
+		if (introductionRequest == null) {
+			synchronized (simulationVPNMap) {
+				Map<InetAddress, SimVPNImpl> vpnMap = simulationVPNMap.get(local.getAddress());
+				vpnMap.remove(remote);
+			}
+		} else {
+			synchronized (ephemeralVPNMap) {
+				Map<IntroductionRequest, SimVPNImpl> vpnMap = ephemeralVPNMap.get(local.getAddress());
+				vpnMap.remove(introductionRequest);
+			}
 		}
 		closed = true;
+		if (first && remoteVPN != null) {
+			remoteVPN.privateClose(false);
+		}
+		remoteVPN = null;
 	}
 
 	@Override
@@ -168,14 +199,28 @@ public class SimVPNImpl implements VPN, EventProcessor {
 			try {
 				receive((Message) e);
 			} catch (IOException e1) {
-				eventingSystem.scheduleEventRelative(remoteVPN, e, 0);
+				e1.printStackTrace();
+				System.exit(0);
 			}
+			return;
+		}
+		if (e == CLOSE_VPN_EVENT) {
+			if (remoteVPN == null) {
+				privateClose(true);
+			} else {
+				if (AddressUtils.compare(local.getAddress(), remote) < 0) {
+					remoteVPN.privateClose(true);
+				} else {
+					privateClose(true);
+				}
+			}
+			return;
 		}
 	}
-	
+
 	@Override
 	public String toString() {
-		return "simvpn " + local + "<==>" + remote;
+		return stringRep;
 	}
 
 }

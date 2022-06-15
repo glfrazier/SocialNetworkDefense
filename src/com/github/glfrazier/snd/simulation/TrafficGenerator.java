@@ -7,12 +7,12 @@ import java.util.Random;
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
+import com.github.glfrazier.snd.node.MessageReceiver;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.VPN;
-import com.github.glfrazier.snd.util.VPNEndpoint;
 import com.github.glfrazier.snd.util.VPNFactory;
 
-public class TrafficGenerator implements VPNEndpoint, EventProcessor {
+public class TrafficGenerator implements MessageReceiver, EventProcessor {
 
 	public static final Event WAKEUP_EVENT = new Event() {
 		public String toString() {
@@ -20,17 +20,15 @@ public class TrafficGenerator implements VPNEndpoint, EventProcessor {
 		}
 	};
 	private InetAddress address;
-	private VPN vpnToClient;
+	private SimVPNImpl vpnToClient;
 	private float exponentialRate;
 
 	private Random random;
 	private Simulation sim;
 
-	public TrafficGenerator(InetAddress addr, InetAddress proxyAddr, VPNFactory factory, Simulation sim,
+	public TrafficGenerator(InetAddress addr, Simulation sim,
 			EventingSystem es) {
 		address = addr;
-		factory.initialize(this);
-		vpnToClient = factory.createVPN(proxyAddr);
 		this.sim = sim;
 		exponentialRate = sim.getFloatProperty("snd.sim.client_traffic_exponential");
 		long seed = sim.getSeed();
@@ -39,6 +37,10 @@ public class TrafficGenerator implements VPNEndpoint, EventProcessor {
 		es.scheduleEventRelative(this, WAKEUP_EVENT, getDelayToNextEvent());
 	}
 
+	public void attachToProxy(SimVPNImpl vpn) {
+		this.vpnToClient = vpn;
+	}
+	
 	private long getDelayToNextEvent() {
 		double u = random.nextDouble();
 		double x = -Math.log(1 - u) / exponentialRate;
@@ -54,9 +56,9 @@ public class TrafficGenerator implements VPNEndpoint, EventProcessor {
 	}
 
 	@Override
-	public void receive(Message m, VPN vpn) {
-		if (vpn != vpnToClient) {
-			System.err.println("The traffic generator should only have one VPN!!");
+	public void receive(Message m) {
+		if (!m.getDst().equals(address)) {
+			System.err.println("Why did " + this + " receive " + m + "!?");
 			System.exit(-1);
 		}
 		// TODO record statistics
@@ -90,4 +92,5 @@ public class TrafficGenerator implements VPNEndpoint, EventProcessor {
 	public String toString() {
 		return "TrafficGenerator<" + address + ">";
 	}
+
 }

@@ -1,18 +1,19 @@
 package com.github.glfrazier.snd.simulation;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
 
 import com.github.glfrazier.event.EventingSystem;
+import com.github.glfrazier.snd.node.MessageReceiver;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.util.VPN;
-import com.github.glfrazier.snd.util.VPNEndpoint;
 import com.github.glfrazier.snd.util.VPNFactory;
 
 public class SimVPNFactory implements VPNFactory {
 
-	private VPNEndpoint owner;
+	private MessageReceiver owner;
 
 	private EventingSystem eventingSystem;
 
@@ -24,13 +25,12 @@ public class SimVPNFactory implements VPNFactory {
 		this.eventingSystem = es;
 	}
 
-	@Override
-	public void initialize(VPNEndpoint owner) {
+	public void initialize(MessageReceiver owner) {
 		this.owner = owner;
 	}
 
 	@Override
-	public VPN createVPN(InetAddress remote) {
+	public VPN createVPN(InetAddress remote, Object keyingMaterial) throws IOException {
 		if (owner == null) {
 			throw new IllegalStateException("initialize(owner) has not been invoked");
 		}
@@ -38,7 +38,8 @@ public class SimVPNFactory implements VPNFactory {
 	}
 
 	@Override
-	public VPN createEphemeralVPN(InetAddress remote, IntroductionRequest transaction) {
+	public VPN createIntroducedVPN(InetAddress remote, IntroductionRequest transaction, Object keyingMaterial)
+			throws IOException {
 		if (owner == null) {
 			throw new IllegalStateException("initialize(owner) has not been invoked");
 		}

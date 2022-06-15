@@ -1,5 +1,6 @@
 package com.github.glfrazier.snd.protocol;
 
+import java.io.IOException;
 import java.net.InetAddress;
 
 import com.github.glfrazier.event.Event;
@@ -13,8 +14,8 @@ import com.github.glfrazier.statemachine.Transition;
 
 /**
  * One start state ("Unconnected"), two end states ("Connected", "Failure"). In
- * Unconnected, the action is to kick off an {@link RequestProtocol} toward
- * the destination, via the current {@link #introducer}. If the introduction
+ * Unconnected, the action is to kick off an {@link RequestProtocol} toward the
+ * destination, via the current {@link #introducer}. If the introduction
  * succeeds, the old VPN is closed. If the new VPN is to the message's
  * destination we send the message and transition to Connected.
  * 
@@ -30,20 +31,17 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 	private static final Event FAILURE = new EventImpl<RequestProtocol>(null, "failure");
 	private Message message;
 	private ClientProxy requester;
-	private IntroductionRequest request;
-	private VPN nextVPN;
-	
+	private InetAddress introducer;
+
 	private State unconnectedState;
 	private State connectedState;
 	private State failureState;
-	
-	private InetAddress proxyAddress;
 
-	public ClientConnectToServerProtocol(ClientProxy client, Message m) {
-		super("Introduction Sequence: " + m.getSrc() + " ==> " + m.getDst(), EventEqualityMode.CLASS_EQUALS);
+	public ClientConnectToServerProtocol(ClientProxy client, Message m, boolean verbose) {
+		super("Introduction Sequence: " + m.getSrc() + " ==> " + m.getDst(), EventEqualityMode.EQUALS);
 		this.message = m;
 		this.requester = client;
-		this.nextVPN = client.getVPN(client.getInitialIntroducer());
+		this.verbose = verbose;
 		unconnectedState = new State("Unconnected", createIntroductionAction(this));
 		addTransition(new Transition(unconnectedState, NEXT_STEP, unconnectedState));
 		setStartState(unconnectedState);
@@ -51,17 +49,11 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 		addTransition(new Transition(unconnectedState, FAILURE, failureState));
 		connectedState = new State("Connected");
 		addTransition(new Transition(unconnectedState, CONNECTED, connectedState));
+		introducer = requester.getInitialIntroducer();
 	}
 
 	public boolean isCompleted() {
 		return this.getCurrentState() == failureState || this.getCurrentState() == connectedState;
-	}
-
-	public VPN getServerVPN() {
-		if (this.getCurrentState() != connectedState) {
-			throw new IllegalStateException(this + " is not in the connected state.");
-		}
-		return nextVPN;
 	}
 
 	public Message getMessage() {
@@ -71,35 +63,52 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 	private State.Action createIntroductionAction(ClientConnectToServerProtocol clientToServerProtocol) {
 		return new State.Action() {
 
+
 			public void act(State state, Event e) {
-				request = new IntroductionRequest(clientToServerProtocol.getClient().getAddress(),
-						nextVPN.getRemote(), clientToServerProtocol.getMessage().getDst());
-				RequestProtocol intro = new RequestProtocol(requester, request);
-				clientToServerProtocol.getClient().registerProtocol(intro);
+				IntroductionRequest request = new IntroductionRequest(requester.getAddress(), introducer,
+						message.getDst());
+				RequestProtocol intro = new RequestProtocol(requester, request, verbose);
+				requester.registerProtocol(intro);
 				intro.registerCallback(clientToServerProtocol);
 				intro.begin();
 			}
 		};
 	}
 
-	protected ClientProxy getClient() {
-		return requester;
-	}
-
 	@Override
 	public void stateMachineEnded(StateMachine machine) {
-		RequestProtocol ip = (RequestProtocol) machine;
-		if (!nextVPN.getRemote().equals(requester.getInitialIntroducer())) {
-			requester.closeVPN(request);
-		}
-		if (ip.vpnWasCreated()) {
-			nextVPN = ip.getResultingVPN();
-			if (nextVPN.getRemote().equals(proxyAddress)) {
-				this.receive(CONNECTED);
-				return;
+		RequestProtocol rp = (RequestProtocol) machine;
+		if (rp.introductionSucceeded()) {
+			InetAddress newNeighbor = rp.getResultingNeighbor();
+			try {
+				requester.getImplementation().getComms().closeIntroducedVPN(rp.getIntroductionRequest().introducer);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
-			// else
-			this.receive(NEXT_STEP);
+			if (newNeighbor.equals(message.getDst())) {
+				try {
+					requester.getImplementation().getComms().send(message);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				this.receive(CONNECTED);
+			} else {
+				introducer = newNeighbor;
+				this.receive(NEXT_STEP);
+			}
+			return;
+		} else if (rp.routeIsAvailable()) {
+			requester.getImplementation().getComms().addRoute(message.getDst(), rp.getIntroductionRequest().introducer);
+			try {
+				requester.getImplementation().getComms().send(message);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			this.receive(CONNECTED);
+			return;
 		}
 	}
 

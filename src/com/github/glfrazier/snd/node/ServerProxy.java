@@ -9,30 +9,28 @@ import com.github.glfrazier.snd.protocol.message.IntroductionDeniedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedWillRouteMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
-import com.github.glfrazier.snd.util.Router;
-import com.github.glfrazier.snd.util.VPN;
-import com.github.glfrazier.snd.util.VPNFactory;
+import com.github.glfrazier.snd.protocol.message.WrappedMessage;
+import com.github.glfrazier.snd.simulation.SimComms;
+import com.github.glfrazier.snd.util.Implementation;
 
 public class ServerProxy extends SNDNode {
 
-	private VPN vpnToAppServer;
+	private InetAddress proxiedAppServer;
 	private InetAddress finalIntroducer;
-	private Router router;
 
-	public ServerProxy(InetAddress addr, VPNFactory vpnFactory, EventingSystem es, Properties props) {
-		super(addr, vpnFactory, //
-				null, // This is the DiscoveryServer argument. Servers do not do discovery.
-				es, props);
-		router = new Router(this);
+	public ServerProxy(InetAddress addr, Implementation impl, EventingSystem es, Properties props) {
+		super(addr, impl, es, props);
 	}
 
-	public void connectAppServer(InetAddress app) {
+	public void connectAppServer(InetAddress app) throws IOException {
 		// Note that we are not using the ImplBase class' VPN management logic for the
 		// vpn to the user/app.
-		if (vpnToAppServer != null) {
-			vpnToAppServer.close();
+		if (proxiedAppServer != null) {
+			implementation.getComms().closeVPN(proxiedAppServer);
+			proxiedAppServer = null;
 		}
-		vpnToAppServer = vpnFactory.createVPN(app);
+		implementation.getComms().openVPN(app, null);
+		proxiedAppServer = app;
 	}
 
 	/**
@@ -42,38 +40,35 @@ public class ServerProxy extends SNDNode {
 	 * one initial introducer.
 	 * 
 	 * @param introducer
+	 * @throws IOException
 	 */
-	public void connectFinalIntroducer(InetAddress introducer) {
+	public void connectFinalIntroducer(InetAddress introducer) throws IOException {
 		if (finalIntroducer != null) {
-			closeVPN(finalIntroducer);
+			implementation.getComms().closeVPN(finalIntroducer);
+			finalIntroducer = null;
 		}
 		this.finalIntroducer = introducer;
-		try {
-			// Access the superclass' implementation of openVPN, avoiding our local
-			// implementation.
-			super.openVPN(introducer);
-		} catch (IOException e) {
-			e.printStackTrace();
-			System.exit(-1);
-		}
+		implementation.getComms().openVPN(introducer, null);
+		finalIntroducer = introducer;
 	}
 
-	protected void processIntroductionRequest(IntroductionRequestMessage m, VPN vpn) {
-		if (m.getDst().equals(vpnToAppServer.getRemote())) {
+	protected void processIntroductionRequest(IntroductionRequestMessage m) {
+		if (m.getIntroductionRequest().destination.equals(proxiedAppServer)) {
 			// Being asked for an introduction to the app server that this node is proxying
 			// for.
 			// We have already accepted the introduction to this proxy (that is the VPN this
 			// request arrived on). So, we can just deny the introduction request with a
 			// response that we will route to the server.
 			try {
-				vpn.send(new IntroductionDeniedWillRouteMessage(m.getIntroductionRequest()));
+				implementation.getComms().send(new IntroductionDeniedWillRouteMessage(m.getIntroductionRequest()));
 			} catch (IOException e) {
 				// ignore the failure
 			}
 		} else {
 			// The server proxy does not perform introductions!
 			try {
-				vpn.send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
+				System.err.println(this + " received unexpted introduction request: " + m);
+				implementation.getComms().send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -82,50 +77,33 @@ public class ServerProxy extends SNDNode {
 	}
 
 	@Override
-	protected void processMessage(Message m, VPN vpn) {
-		if (vpn == vpnToAppServer) {
-			processServerToClient(m, vpn);
-		} else {
-			processClientToServer(m, vpn);
-		}
-	}
-
-	protected void processClientToServer(Message m, VPN vpn) {
-		if (!vpnToAppServer.getRemote().equals(m.getDst())) {
-			// Why are we preventing the app server from routing the message (packet)
-			// onward?
-			System.err.println(this + " received a ClientApp msg addressed to " + m.getDst() + ", but our appServer is "
-					+ vpnToAppServer.getRemote());
-			System.exit(-1);
-		}
-		try {
-			vpnToAppServer.send(m);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		router.addRoute(m.getSrc(), vpn);
-	}
-
-	protected void processServerToClient(Message m, VPN vpnIn) {
-		if (vpnIn != vpnToAppServer) {
-			System.err.println("Invariant Violation! Received a ServerAppMessage on VPN " + vpnIn);
-			new Exception().printStackTrace();
-			System.exit(-1);
-		}
-		VPN vpnOut = router.getRouteTo(m.getDst());
-		if (vpnOut == null) {
-			System.err.println("We do not have a VPN to forward " + m + " onto.");
+	protected void processMessage(Message m) {
+		if (m instanceof WrappedMessage) {
+			WrappedMessage wrapper = (WrappedMessage) m;
+			Message enclosed = wrapper.getEnclosedMessage();
+			if (!enclosed.getDst().equals(proxiedAppServer)) {
+				new Exception(this + ": Why did we receive " + m + "?").printStackTrace();
+				return;
+			}
+			implementation.getComms().addRoute(enclosed.getSrc(), wrapper.getSrc());
+			super.processMessage(wrapper);
 			return;
 		}
+		if (!m.getSrc().equals(proxiedAppServer)) {
+			new Exception(this + " should only receive unwrapped messages from our proxiedAppServer: " + m)
+					.printStackTrace();
+			return;
+		}
+		// The comms.send() method will automagically wrap and forward messages from the AppServer.
 		try {
-			vpnOut.send(m);
+			implementation.getComms().send(m);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
 
+	
 	@Override
 	public String toString() {
 		return "ServerProxy-" + getAddress();

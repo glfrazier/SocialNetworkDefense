@@ -1,5 +1,6 @@
 package com.github.glfrazier.snd.util;
 
+import java.io.IOException;
 import java.net.InetAddress;
 
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
@@ -7,23 +8,15 @@ import com.github.glfrazier.snd.protocol.IntroductionRequest;
 public interface VPNFactory {
 
 	/**
-	 * The VPN factory must be initialized before it can be used.
-	 * 
-	 * @param owner
-	 */
-	public void initialize(VPNEndpoint owner);
-
-	/**
 	 * Create a long-lived VPN.
 	 * 
-	 * @param remote the address to which this host is to be connected.
+	 * @param remote         the address to which this host is to be connected.
+	 * @param keyingMaterial crypto material needed to construct the VPN.
 	 * @return the created VPN.
-	 * @throws IllegalStateException if {@link #initialize} has not been called.
+	 * @throws IOException the VPN cannot be created.
 	 */
-	public VPN createVPN(InetAddress remote // , Crypto keys TODO add keying material parameter
-	) throws IllegalStateException;
+	public VPN createVPN(InetAddress remote, Object keyingMaterial) throws IOException;
 
-	public VPN createEphemeralVPN(InetAddress remote, IntroductionRequest transaction // , Crypto keys
-	);
+	public VPN createIntroducedVPN(InetAddress remote, IntroductionRequest transaction, Object keyingMaterial) throws IOException;
 
 }

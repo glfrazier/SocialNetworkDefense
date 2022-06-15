@@ -3,17 +3,17 @@ package com.github.glfrazier.snd.simulation;
 import java.io.IOException;
 import java.net.InetAddress;
 
+import com.github.glfrazier.snd.node.MessageReceiver;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.VPN;
-import com.github.glfrazier.snd.util.VPNEndpoint;
 
-public class TrafficReceiver implements VPNEndpoint {
+public class TrafficReceiver implements MessageReceiver {
 
 	private float falsePositiveRate;
 	private float falseNegativeRate;
 	private Simulation sim;
 
-	private VPN vpnToServer;
+	private SimVPNImpl vpnToProxy;
 	private InetAddress address;
 
 	public TrafficReceiver(InetAddress address, float falsePositiveRate, float falseNegativeRate, Simulation sim) {
@@ -23,9 +23,6 @@ public class TrafficReceiver implements VPNEndpoint {
 		this.sim = sim;
 	}
 
-	public void attachToServer(VPN vpn) {
-		vpnToServer = vpn;
-	}
 
 	@Override
 	public InetAddress getAddress() {
@@ -33,11 +30,11 @@ public class TrafficReceiver implements VPNEndpoint {
 	}
 
 	@Override
-	public void receive(Message m, VPN vpn) {
+	public void receive(Message m) {
 		Message response = new Message(m.getSrc(), getAddress(), "Response!");
 		sim.printEvent(this + " received " + m + " and is responding with " + response);
 		try {
-			vpnToServer.send(response);
+			vpnToProxy.send(response);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -47,5 +44,10 @@ public class TrafficReceiver implements VPNEndpoint {
 	@Override
 	public String toString() {
 		return "TrafficReceiver<" + address + ">";
+	}
+
+
+	public void attachToServer(SimVPNImpl vpn) {
+		this.vpnToProxy = vpn;		
 	}
 }
