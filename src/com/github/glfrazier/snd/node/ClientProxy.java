@@ -89,7 +89,6 @@ public class ClientProxy extends SNDNode //implements StateMachineTracker
 				// VPN. And we certainly should not do so simply because we sent a Message
 				// (packet?) to the application client.
 				try {
-					System.out.println(this + " closing connection to " + m.getSrc());
 					implementation.getComms().closeIntroducedVPN(m.getSrc());
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
