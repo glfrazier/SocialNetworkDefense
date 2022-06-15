@@ -162,7 +162,6 @@ public class SimVPNImpl implements VPN, EventProcessor {
 	}
 
 	public void close() {
-		System.out.println(local + " closing " + this);
 		if (closed) {
 			return;
 		}
@@ -187,6 +186,7 @@ public class SimVPNImpl implements VPN, EventProcessor {
 			}
 		}
 		closed = true;
+		local.vpnClosed(this);
 		if (first && remoteVPN != null) {
 			remoteVPN.privateClose(false);
 		}

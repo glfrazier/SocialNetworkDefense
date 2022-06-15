@@ -3,6 +3,7 @@ package com.github.glfrazier.snd.node;
 import java.net.InetAddress;
 
 import com.github.glfrazier.snd.protocol.message.Message;
+import com.github.glfrazier.snd.util.VPN;
 
 /**
  * This interface facilitates building the simulation, by allowing there to be
@@ -25,4 +26,10 @@ public interface MessageReceiver {
 	 * @return the address
 	 */
 	public InetAddress getAddress();
+	
+	/**
+	 * Notify the message receiver that a VPN has been closed.
+	 */
+	public void vpnClosed(VPN vpn);
+	
 }

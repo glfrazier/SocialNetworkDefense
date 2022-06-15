@@ -65,4 +65,17 @@ public interface Comms {
 	 */
 	public boolean canSendTo(InetAddress dst);
 
+	/**
+	 * Notify the Comms package that a VPN has been closed. The SNDNode invokes this
+	 * in response to the {@link MessageReceiver#vpnClosed(VPN)} invocation. If you
+	 * are coding a VPN implementation, when a VPN is closed, it should invoke
+	 * {@link SNDNode#vpnClosed(VPN)}, <emph>NOT</emph> this method. This maximizes
+	 * the separation (modularity) between the VPN implementation and the Comms
+	 * implementation, and allows one to inject behavior monitoring code in the
+	 * SNDNode.
+	 * 
+	 * @param vpn
+	 */
+	public void vpnClosed(VPN vpn);
+
 }

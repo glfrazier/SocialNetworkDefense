@@ -50,4 +50,10 @@ public class TrafficReceiver implements MessageReceiver {
 	public void attachToServer(SimVPNImpl vpn) {
 		this.vpnToProxy = vpn;		
 	}
+
+
+	@Override
+	public void vpnClosed(VPN vpn) {
+		System.err.println(this + ": why did this happen?");
+	}
 }

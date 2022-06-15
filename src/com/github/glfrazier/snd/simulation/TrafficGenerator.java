@@ -10,7 +10,6 @@ import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.MessageReceiver;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.VPN;
-import com.github.glfrazier.snd.util.VPNFactory;
 
 public class TrafficGenerator implements MessageReceiver, EventProcessor {
 
@@ -84,13 +83,18 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 
 		// schedule the next transmission
 		long delta = getDelayToNextEvent();
-		System.out.println("\t\tDelay to next transmission: " + delta);
+		System.out.println("\t\tDelay to next transmission: " + ((float)delta/1000.0) + " seconds.");
 		es.scheduleEventRelative(this, WAKEUP_EVENT, delta);
 	}
 
 	@Override
 	public String toString() {
 		return "TrafficGenerator<" + address + ">";
+	}
+
+	@Override
+	public void vpnClosed(VPN vpn) {
+		System.err.println(this + ": why did this happen?");
 	}
 
 }

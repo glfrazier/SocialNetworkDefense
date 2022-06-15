@@ -13,13 +13,14 @@ import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.SNDMessage;
 import com.github.glfrazier.snd.protocol.message.WrappedMessage;
 import com.github.glfrazier.snd.util.Comms;
+import com.github.glfrazier.snd.util.VPN;
 
 public class SimComms implements Comms {
 
 	private SNDNode owner;
 
 	private final Map<InetAddress, SimVPNImpl> longLivedVPNs = new HashMap<>();
-	private final Map<InetAddress, SimVPNImpl> ephemeralVPNs = new HashMap<>();
+	private final Map<InetAddress, SimVPNImpl> introducedVPNs = new HashMap<>();
 
 	private Map<InetAddress, InetAddress> routes;
 	private Map<InetAddress, Set<InetAddress>> routeTo;
@@ -60,12 +61,12 @@ public class SimComms implements Comms {
 		return getRouteTo(dst) != null;
 	}
 
-	private SimVPNImpl getRouteTo(InetAddress dst) {
+	private synchronized SimVPNImpl getRouteTo(InetAddress dst) {
 		SimVPNImpl vpn = longLivedVPNs.get(dst);
 		if (vpn != null) {
 			return vpn;
 		}
-		vpn = ephemeralVPNs.get(dst);
+		vpn = introducedVPNs.get(dst);
 		if (vpn != null) {
 			return vpn;
 		}
@@ -83,12 +84,13 @@ public class SimComms implements Comms {
 
 	@Override
 	public void send(Message msg) throws IOException {
-		SimVPNImpl vpn = longLivedVPNs.get(msg.getDst());
-		if (vpn != null) {
-			vpn.send(msg);
-			return;
+		SimVPNImpl vpn = null;
+		synchronized (this) {
+			vpn = longLivedVPNs.get(msg.getDst());
+			if (vpn == null) {
+				vpn = introducedVPNs.get(msg.getDst());
+			}
 		}
-		vpn = ephemeralVPNs.get(msg.getDst());
 		if (vpn != null) {
 			vpn.send(msg);
 			return;
@@ -104,7 +106,7 @@ public class SimComms implements Comms {
 	}
 
 	@Override
-	public void openVPN(InetAddress nbr, Object keyingMaterial) throws IOException {
+	public synchronized void openVPN(InetAddress nbr, Object keyingMaterial) throws IOException {
 		if (longLivedVPNs.containsKey(nbr)) {
 			return;
 		}
@@ -113,7 +115,7 @@ public class SimComms implements Comms {
 	}
 
 	@Override
-	public void openIntroducedVPN(InetAddress nbr, IntroductionRequest request, Object keyingMaterial)
+	public synchronized void openIntroducedVPN(InetAddress nbr, IntroductionRequest request, Object keyingMaterial)
 			throws IOException {
 		if (longLivedVPNs.containsKey(nbr)) {
 			System.err.println(this + ": Why were we introduced to a neighbor!?");
@@ -121,25 +123,26 @@ public class SimComms implements Comms {
 			new Exception().printStackTrace();
 			System.exit(-1);
 		}
-		if (ephemeralVPNs.containsKey(nbr)) {
+		if (introducedVPNs.containsKey(nbr)) {
 			System.err.println(this + ": Why were we re-introduced to an introduced neighbor!?");
-			System.err.println("\tvpn=" + ephemeralVPNs.get(nbr) + ", nbr=" + nbr + ", request=" + request);
+			System.err.println("\tvpn=" + introducedVPNs.get(nbr) + ", nbr=" + nbr + ", request=" + request);
 			new Exception().printStackTrace();
 			System.exit(-1);
 		}
 		SimVPNImpl vpn = (SimVPNImpl) owner.getImplementation().getVpnFactory().createIntroducedVPN(nbr, request,
 				keyingMaterial);
-		ephemeralVPNs.put(nbr, vpn);
+		introducedVPNs.put(nbr, vpn);
 	}
 
 	@Override
 	public boolean closeVPN(InetAddress nbr) throws IOException {
-		SimVPNImpl vpn = longLivedVPNs.remove(nbr);
-		if (vpn != null) {
-			vpn.close();
-			return true;
+		SimVPNImpl vpn = null;
+		synchronized (this) {
+			vpn = longLivedVPNs.remove(nbr);
+			if (vpn == null) {
+				vpn = introducedVPNs.remove(nbr);
+			}
 		}
-		vpn = ephemeralVPNs.remove(nbr);
 		if (vpn != null) {
 			vpn.close();
 			return true;
@@ -149,7 +152,10 @@ public class SimComms implements Comms {
 
 	@Override
 	public boolean closeIntroducedVPN(InetAddress nbr) throws IOException {
-		SimVPNImpl vpn = ephemeralVPNs.remove(nbr);
+		SimVPNImpl vpn = null;
+		synchronized (this) {
+			vpn = introducedVPNs.remove(nbr);
+		}
 		if (vpn != null) {
 			vpn.close();
 			return true;
@@ -160,5 +166,12 @@ public class SimComms implements Comms {
 	@Override
 	public String toString() {
 		return "SimComms for " + owner;
+	}
+
+	@Override
+	public synchronized void vpnClosed(VPN v) {
+		SimVPNImpl vpn = (SimVPNImpl) v;
+		longLivedVPNs.remove(vpn.getRemote());
+		introducedVPNs.remove(vpn.getRemote());
 	}
 }

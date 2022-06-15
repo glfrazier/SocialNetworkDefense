@@ -27,6 +27,7 @@ import com.github.glfrazier.snd.protocol.message.WrappedMessage;
 import com.github.glfrazier.snd.util.DiscoveryService;
 import com.github.glfrazier.snd.util.Implementation;
 import com.github.glfrazier.snd.util.PropertyParser;
+import com.github.glfrazier.snd.util.VPN;
 
 /**
  * A node in the Social Network Defense network. Implements the SND protocol for
@@ -342,6 +343,11 @@ public class SNDNode implements MessageReceiver {
 
 	public Implementation getImplementation() {
 		return implementation;
+	}
+
+	@Override
+	public void vpnClosed(VPN vpn) {
+		implementation.getComms().vpnClosed(vpn);
 	}
 
 }
