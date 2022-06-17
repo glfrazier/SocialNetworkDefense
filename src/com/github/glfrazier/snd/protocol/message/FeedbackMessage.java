@@ -43,6 +43,39 @@ public class FeedbackMessage extends SNDMessage implements Serializable, Event {
 		this.feedback = feedback;
 	}
 
+	/**
+	 * Construct Feedback for the (bad) behavior of the subject IP address. This
+	 * constructor is to be used by nodes that are not SNDP participants, e.g., the
+	 * servers residing behind ServerProxies.
+	 * 
+	 * @param sender   The node sending the feedback.
+	 * @param subject  The node that the feedback is about.
+	 * @param feedback The (bad) feedback.
+	 */
+	public FeedbackMessage(InetAddress sender, InetAddress subject, Feedback feedback) {
+		super(subject, sender, null, MessageType.FEEDBACK);
+		this.subject = subject;
+		this.feedback = feedback;
+	}
+
+	/**
+	 * The constructor to be used by the last introducer in the pedigree, sending
+	 * feedback to the client.
+	 * 
+	 * @param requester  The node that originated the transaction&mdash;the node
+	 *                   that requested the introduction(s).
+	 * @param introducer The of whom the introduction was requested and is providing
+	 *                   the feedback.
+	 * @param subject    The node that the feedback is about. Will be the requester,
+	 *                   unless the requester is proxying for other clients.
+	 * @param feedback   The feedback, which for now is always bad.
+	 */
+	public FeedbackMessage(InetAddress requester, InetAddress introducer, InetAddress subject, Feedback feedback) {
+		super(requester, introducer, null, MessageType.FEEDBACK);
+		this.subject = subject;
+		this.feedback = feedback;
+	}
+
 	public InetAddress getSubject() {
 		return subject;
 	}
@@ -50,7 +83,7 @@ public class FeedbackMessage extends SNDMessage implements Serializable, Event {
 	public Feedback getFeedback() {
 		return feedback;
 	}
-	
+
 	@Override
 	public String toString() {
 		String result = super.toString();

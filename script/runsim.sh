@@ -9,7 +9,7 @@ if (( $# == 0 )); then
    echo You can add to the classpath via the '"XCP"' environment variable.
    echo Make sure that the value you give to XCP begins with your "platform's"
    echo path separator "(':' on Linux, ';' on Windows)", so that it can be
-   echo appended to bin/.
+   echo appended to the classpath.
    echo
    exit -1
 fi

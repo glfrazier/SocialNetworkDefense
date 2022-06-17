@@ -11,7 +11,7 @@ snd.number_of_threads: 1
 snd.sim.client_traffic_exponential: 0.001
 
 # Divide by 1000 to get number of seconds
-snd.sim.end_time: 200000
+snd.sim.end_time: 2000000
 
 # Configure the threshold controller
 snd.thold_ctlr.sensor_smoothing_alpha: 0.1

@@ -17,16 +17,10 @@ import com.github.glfrazier.snd.protocol.message.IntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.WrappedMessage;
 import com.github.glfrazier.snd.util.Implementation;
+import com.github.glfrazier.snd.util.TimeAndIntroductionRequest;
 
 public class ServerProxy extends SNDNode {
 
-	private static final Event SERVER_PROXY_MAINTENANCE_EVENT = new Event() {
-		private final String name = "ServerProxy Maintenance Event";
-
-		public String toString() {
-			return name;
-		}
-	};
 	private InetAddress proxiedAppServer;
 	private InetAddress finalIntroducer;
 	private Map<InetAddress, TimeAndIntroductionRequest> mostRecentIntroductionRequestForSrc;
@@ -34,7 +28,6 @@ public class ServerProxy extends SNDNode {
 	public ServerProxy(InetAddress addr, Implementation impl, EventingSystem es, Properties props) {
 		super(addr, impl, es, props);
 		mostRecentIntroductionRequestForSrc = new LinkedHashMap<>();
-		eventingSystem.scheduleEventRelative(this, SERVER_PROXY_MAINTENANCE_EVENT, FEEDBACK_EXPIRATION_TIME / 10);
 	}
 
 	public void connectAppServer(InetAddress app) throws IOException {
@@ -141,12 +134,14 @@ public class ServerProxy extends SNDNode {
 					.printStackTrace();
 			return;
 		}
-		IntroductionRequest introductionRequest = m.getIntroductionRequest();
-		if (introductionRequest != null) {
-			new Exception(this
-					+ ": feedback messages from the proxiedAppServer should contain null introduction requests: " + m)
-					.printStackTrace();
-			System.exit(-1);
+		if (true) {
+			IntroductionRequest introductionRequest = m.getIntroductionRequest();
+			if (introductionRequest != null) {
+				new Exception(this
+						+ ": feedback messages from the proxiedAppServer should contain null introduction requests: "
+						+ m).printStackTrace();
+				System.exit(-1);
+			}
 		}
 		InetAddress src = m.getSubject();
 		TimeAndIntroductionRequest tNreq = mostRecentIntroductionRequestForSrc.remove(src);
@@ -155,7 +150,7 @@ public class ServerProxy extends SNDNode {
 					this + " Received a feedback message about a connection that has expired or never was: " + m);
 			return;
 		}
-		FeedbackMessage fm = new FeedbackMessage(introductionRequest, getAddress(), src, m.getFeedback());
+		FeedbackMessage fm = new FeedbackMessage(tNreq.ir, getAddress(), src, m.getFeedback());
 		try {
 			implementation.getComms().send(fm);
 		} catch (IOException e) {
@@ -171,7 +166,7 @@ public class ServerProxy extends SNDNode {
 	@Override
 	public void process(Event e, EventingSystem eventingSystem) {
 		super.process(e, eventingSystem);
-		if (e == SERVER_PROXY_MAINTENANCE_EVENT) {
+		if (e == NODE_MAINTENANCE_EVENT) {
 			Thread t = new Thread() {
 				public void run() {
 					synchronized (mostRecentIntroductionRequestForSrc) {
@@ -192,13 +187,4 @@ public class ServerProxy extends SNDNode {
 		}
 	}
 
-	private static class TimeAndIntroductionRequest {
-		public long time;
-		public IntroductionRequest ir;
-
-		public TimeAndIntroductionRequest(long t, IntroductionRequest i) {
-			time = t;
-			ir = i;
-		}
-	}
 }

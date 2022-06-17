@@ -57,29 +57,25 @@ public class SimComms implements Comms {
 		return true;
 	}
 
+	@Override
 	public boolean canSendTo(InetAddress dst) {
 		return getRouteTo(dst) != null;
 	}
 
-	private synchronized SimVPNImpl getRouteTo(InetAddress dst) {
+	private synchronized InetAddress getRouteTo(InetAddress dst) {
 		SimVPNImpl vpn = longLivedVPNs.get(dst);
 		if (vpn != null) {
-			return vpn;
+			return vpn.getRemote();
 		}
 		vpn = introducedVPNs.get(dst);
 		if (vpn != null) {
-			return vpn;
+			return vpn.getRemote();
 		}
 		InetAddress route = routes.get(dst);
 		if (route == null) {
-			System.err.println("There is no route to " + dst);
 			return null;
 		}
-		vpn = getRouteTo(route);
-		if (vpn == null) {
-			System.err.println("There is no route to " + dst);
-		}
-		return vpn;
+		return getRouteTo(route);
 	}
 
 	@Override
@@ -184,5 +180,10 @@ public class SimComms implements Comms {
 			return introducedVPNs.get(nbr).getIntroductionRequest();
 		}
 		throw new IOException("Not connected to " + nbr);
+	}
+
+	@Override
+	public boolean isNonIntroducedNeighbor(InetAddress node) {
+		return longLivedVPNs.containsKey(node);
 	}
 }

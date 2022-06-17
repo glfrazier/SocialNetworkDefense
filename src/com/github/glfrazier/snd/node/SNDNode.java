@@ -13,7 +13,6 @@ import java.util.logging.Logger;
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
-import com.github.glfrazier.snd.node.ServerProxy.TimeAndIntroductionRequest;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.Pedigree;
 import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
@@ -30,6 +29,7 @@ import com.github.glfrazier.snd.protocol.message.WrappedMessage;
 import com.github.glfrazier.snd.util.DiscoveryService;
 import com.github.glfrazier.snd.util.Implementation;
 import com.github.glfrazier.snd.util.PropertyParser;
+import com.github.glfrazier.snd.util.TimeAndIntroductionRequest;
 import com.github.glfrazier.snd.util.VPN;
 
 /**
@@ -43,15 +43,6 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 	private final Map<InetAddress, Pedigree> pedigrees = new HashMap<>();
 
 	/**
-	 * The key set of this Map is the introduction requests that we have offered and
-	 * had accepted, but not yet received feedback about. The values are the
-	 * introduction requests by which we know the requester. If the requester is
-	 * known to this node via a long-lived VPN, then the value is null.
-	 */
-	private Map<IntroductionRequest, IntroductionRequest> pendingFeedbacksToReceive = Collections
-			.synchronizedMap(new HashMap<>());
-
-	/**
 	 * The key set is the set of accepted offers that this node is waiting to send
 	 * feedback about. The value is the timestamp (in milliseconds) when the
 	 * introduction request was accepted. After a suitable timeout (24 hrs?), the
@@ -59,15 +50,23 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 	 */
 	private Map<IntroductionRequest, Long> pendingFeedbacksToSend = Collections.synchronizedMap(new LinkedHashMap<>());
 
+	/**
+	 * The key set of this Map is the introduction requests that we have offered and
+	 * had accepted, but not yet received feedback about. The values are the
+	 * introduction requests by which we know the requester. If the requester is
+	 * known to this node via a long-lived VPN, then the value is null.
+	 */
+	private Map<IntroductionRequest, TimeAndIntroductionRequest> pendingFeedbacksToReceive = Collections
+			.synchronizedMap(new HashMap<>());
+
 	protected final ReputationModule reputationModule;
 	protected final EventingSystem eventingSystem;
 	protected final Implementation implementation;
 	private final Properties properties;
 
 	protected boolean verbose;
-	
 
-	private static final Event NODE_MAINTENANCE_EVENT = new Event() {
+	protected static final Event NODE_MAINTENANCE_EVENT = new Event() {
 		private final String name = "Node Maintenance Event";
 
 		public String toString() {
@@ -80,6 +79,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 	 * introduction.
 	 */
 	protected static final long FEEDBACK_EXPIRATION_TIME = 8 * 60 * 60 * 1000; // eight hours (why?)
+	private static final long MAINTENANCE_INTERVAL = FEEDBACK_EXPIRATION_TIME / 100;
 	protected static final Logger LOGGER = Logger.getLogger(SNDNode.class.getName());
 
 	public SNDNode(InetAddress addr, Implementation implementation, EventingSystem eventingSystem,
@@ -93,6 +93,8 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 		this.reputationModule = new ReputationModule(eventingSystem, this);
 		this.implementation = implementation;
 		this.verbose = getBooleanProperty("snd.node.verbose", false);
+		eventingSystem.scheduleEventRelative(this, NODE_MAINTENANCE_EVENT,
+				MAINTENANCE_INTERVAL + Math.abs(address.hashCode() % 100));
 	}
 
 	@Override
@@ -121,16 +123,14 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 	public synchronized Pedigree getPedigree(InetAddress client) {
 		Pedigree p = pedigrees.get(client);
 		if (p == null) {
-			// This code is simply defensive coding, and it violates the new architecture
-//			if (!longLivedVPNs.containsKey(client)) {
-//				System.err.println("Invariant Violation! We do not have a pedigree for " + client
-//						+ ", but we also do not have a long-lived VPN to them.");
-//				System.exit(-1);
-//			}
+			if (!implementation.getComms().isNonIntroducedNeighbor(client)) {
+				throw new IllegalArgumentException(this + " does not have a pedigree for neighbor " + client);
+			}
 			p = new Pedigree(client);
 			pedigrees.put(client, p);
 		}
 		return p;
+
 	}
 
 	public synchronized void addPedigree(Pedigree p) {
@@ -235,17 +235,18 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 	protected void processFeedback(FeedbackMessage m) {
 		IntroductionRequest introductionRequest = m.getIntroductionRequest();
 		if (!pendingFeedbacksToReceive.containsKey(introductionRequest)) {
-			LOGGER.severe("Received feedback for a transaction that is not pending feedback.");
+			LOGGER.severe(this + ": Received feedback for a transaction that is not pending feedback. m=" + m);
 			return;
 		}
 		Pedigree pedigree = getPedigree(introductionRequest.requester);
 		if (pedigree == null) {
 			// TODO should we manufacture an introducer-less pedigree?
-			LOGGER.warning(this + " received feedback for a client we no longer know.");
+			LOGGER.warning(this + ": Received feedback for a client we no longer know. m=" + m);
 			return;
 		}
 		reputationModule.applyFeedback(pedigree, m.getFeedback());
-		IntroductionRequest previousIntroduction = pendingFeedbacksToReceive.remove(introductionRequest);
+		TimeAndIntroductionRequest tir = pendingFeedbacksToReceive.remove(introductionRequest);
+		IntroductionRequest previousIntroduction = (tir == null ? null : tir.ir);
 		if (previousIntroduction != null) {
 			if (!pendingFeedbacksToSend.containsKey(previousIntroduction)) {
 				// The feedback is too old. Ignore it.
@@ -253,16 +254,19 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 			}
 			pendingFeedbacksToSend.remove(previousIntroduction);
 			if (pedigree == null || pedigree.getRequestSequence().length == 0) {
-				new Exception(
-						"Invariant Violation: we think we should forward this feedback, but there is no previous pedigree.")
-						.printStackTrace();
+				new Exception(this + ": Invariant Violation: we think we should forward " + m
+						+ ", but there is no previous pedigree. Pedigree=" + pedigree).printStackTrace();
 				System.exit(-1);
 			}
 			try {
-				implementation.getComms()
-						.send(new FeedbackMessage(previousIntroduction, getAddress(), m.getSubject(), m.getFeedback()));
+				FeedbackMessage fm = new FeedbackMessage(previousIntroduction, getAddress(), m.getSubject(),
+						m.getFeedback());
+				//System.out.println(this + " sending (fwding) " + fm);
+				implementation.getComms().send(fm);
 			} catch (IOException e) {
-				LOGGER.severe("Failed transmission: " + e);
+				LOGGER.severe(this + ": Failed transmission: " + e);
+				new Exception(this + ": Failed transmission: " + e).printStackTrace();
+				System.exit(-1);
 			}
 		} else {
 			if (pedigree.getRequestSequence().length != 0) {
@@ -271,20 +275,32 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 						.printStackTrace();
 				System.exit(-1);
 			}
-		}
-		if (implementation.getComms().canSendTo(introductionRequest.requester)) {
-			// We are connected to the requester -- forward the feedback to them!
-			try {
-				implementation.getComms()
-						.send(new FeedbackMessage(introductionRequest, getAddress(), m.getSubject(), m.getFeedback()));
-			} catch (IOException e) {
-				LOGGER.severe("Failed transmission: " + e);
+			if (implementation.getComms().isNonIntroducedNeighbor(introductionRequest.requester)) {
+				// We are connected to the requester -- forward the feedback to them!
+				try {
+					implementation.getComms().send(
+							new FeedbackMessage(introductionRequest.requester, getAddress(),
+									m.getSubject(), m.getFeedback()));
+				} catch (IOException e) {
+					LOGGER.severe(this + ": Failed transmission: " + e);
+					new Exception(this + ": Failed transmission: " + e).printStackTrace();
+					System.exit(-1);
+				}
+			} else {
+				new Exception(this
+						+ ": Invariant Violation: there are no introducers, but the requester is not a long-lived neighbor. ir.requester="
+						+ introductionRequest.requester).printStackTrace();
+				System.exit(-1);
 			}
 		}
 	}
 
 	protected void processIntroductionOffer(IntroductionOfferMessage m) {
-		Pedigree p = m.getPedigree().getNext(m.getIntroductionRequest());
+		Pedigree p = m.getPedigree();
+		//System.out.println(this + " received " + m + " with pedigree " + p);
+		p = p.getNext(m.getIntroductionRequest());
+		//System.out.println("\tpedigree is now " + p);
+		addPedigree(p);
 		if (reputationModule.reputationIsGreaterThanThreshold(p)) {
 			// If the client's reputation is above threshold, create a transaction-specific
 			// VPN to the client and send an Introduction Accepted message.
@@ -317,7 +333,8 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 						.getIntroductionRequestForNeighbor(msg.getIntroductionRequest().requester);
 				implementation.getComms()
 						.send(new IntroductionCompletedMessage(msg.getIntroductionRequest(), msg.getSrc()));
-				pendingFeedbacksToReceive.put(msg.getIntroductionRequest(), previousIntroduction);
+				pendingFeedbacksToReceive.put(msg.getIntroductionRequest(),
+						new TimeAndIntroductionRequest(eventingSystem.getCurrentTime(), previousIntroduction));
 			} else if (msg instanceof IntroductionRefusedMessage) {
 				implementation.getComms().send(new IntroductionDeniedMessage(msg.getIntroductionRequest()));
 			} else {
@@ -338,23 +355,32 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 	}
 
 	protected void processIntroductionRequest(IntroductionRequestMessage m) {
-		if (reputationModule.reputationIsGreaterThanThreshold(getPedigree(m.getSrc()))) {
-			DiscoveryService.Query query = implementation.getDiscoveryService().createQuery(m.getServerAddress());
-			// TODO Create a state machine for handling introduction requests, and add the
-			// query to that state machine.
-			InetAddress nextHop = implementation.getDiscoveryService().getNextHopTo(query);
-			IntroductionOfferMessage offer = //
-					new IntroductionOfferMessage(m.getIntroductionRequest(), nextHop, getPedigree(m.getSrc()));
-			try {
-				implementation.getComms().send(offer);
-			} catch (IOException e) {
+		IntroductionRequest ir = m.getIntroductionRequest();
+		if (!ir.requester.equals(m.getSrc())) {
+			LOGGER.severe(
+					this + ": Invariant Violation. Received introduction request, but ir.requester != m.getSrc().\n"
+							+ "\tir=" + ir + ", m=" + m);
+		} else {
+			Pedigree p = getPedigree(ir.requester);
+			//System.out.println(this + " received " + ir + ", pedigree=" + p);
+			if (reputationModule.reputationIsGreaterThanThreshold(p)) {
+				DiscoveryService.Query query = implementation.getDiscoveryService().createQuery(m.getServerAddress());
+				// TODO Create a state machine for handling introduction requests, and add the
+				// query to that state machine.
+				InetAddress nextHop = implementation.getDiscoveryService().getNextHopTo(query);
+				IntroductionOfferMessage offer = //
+						new IntroductionOfferMessage(m.getIntroductionRequest(), nextHop, getPedigree(m.getSrc()));
 				try {
-					implementation.getComms().send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
-				} catch (IOException e1) {
-					// ignore the failure.
+					implementation.getComms().send(offer);
+				} catch (IOException e) {
+					try {
+						implementation.getComms().send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
+					} catch (IOException e1) {
+						// ignore the failure.
+					}
 				}
+				return;
 			}
-			return;
 		}
 		// else
 		try {
@@ -393,13 +419,24 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 		if (e == NODE_MAINTENANCE_EVENT) {
 			Thread t = new Thread() {
 				public void run() {
-					synchronized (mostRecentIntroductionRequestForSrc) {
-						long now = eventingSystem.getCurrentTime();
-						Iterator<InetAddress> iter = mostRecentIntroductionRequestForSrc.keySet().iterator();
+					long now = eventingSystem.getCurrentTime();
+					synchronized (pendingFeedbacksToSend) {
+						Iterator<IntroductionRequest> iter = pendingFeedbacksToSend.keySet().iterator();
 						while (iter.hasNext()) {
-							InetAddress src = iter.next();
-							TimeAndIntroductionRequest tNir = mostRecentIntroductionRequestForSrc.get(src);
-							if (now - tNir.time < FEEDBACK_EXPIRATION_TIME) {
+							IntroductionRequest ir = iter.next();
+							long time = pendingFeedbacksToSend.get(ir);
+							if (now - time < FEEDBACK_EXPIRATION_TIME) {
+								break;
+							}
+							iter.remove();
+						}
+					}
+					synchronized (pendingFeedbacksToReceive) {
+						Iterator<IntroductionRequest> iter = pendingFeedbacksToReceive.keySet().iterator();
+						while (iter.hasNext()) {
+							IntroductionRequest ir = iter.next();
+							long time = pendingFeedbacksToReceive.get(ir).time;
+							if (now - time < FEEDBACK_EXPIRATION_TIME) {
 								break;
 							}
 							iter.remove();
@@ -408,6 +445,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 				}
 			};
 			t.start();
+			eventingSystem.scheduleEventRelative(this, e, MAINTENANCE_INTERVAL);
 		}
 	}
 

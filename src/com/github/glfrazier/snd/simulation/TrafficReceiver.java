@@ -38,12 +38,12 @@ public class TrafficReceiver implements MessageReceiver {
 		if (TrafficGenerator.ATTACK_CONTENT.equals(m.getContent())) {
 			if (random.nextFloat() > falseNegativeRate) {
 				// It was an attack and we detected the attack
-				response = new FeedbackMessage(null, address, m.getSrc(), Feedback.BAD);
+				response = new FeedbackMessage(address, m.getSrc(), Feedback.BAD);
 			}
 		} else {
 			if (random.nextFloat() < falsePositiveRate) {
 				// It was not an attack, but we thought it was
-				response = new FeedbackMessage(null, address, m.getSrc(), Feedback.BAD);
+				response = new FeedbackMessage(address, m.getSrc(), Feedback.BAD);
 			}
 		}
 		if (response == null) {

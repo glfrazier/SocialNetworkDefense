@@ -10,13 +10,14 @@ import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.protocol.ClientConnectToServerProtocol;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.RequestProtocol;
+import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.SNDMessage;
 import com.github.glfrazier.snd.protocol.message.WrappedMessage;
 import com.github.glfrazier.snd.util.Implementation;
 
-public class ClientProxy extends SNDNode //implements StateMachineTracker
-		
+public class ClientProxy extends SNDNode // implements StateMachineTracker
+
 {
 
 	private InetAddress proxiedAppClient;
@@ -72,6 +73,10 @@ public class ClientProxy extends SNDNode //implements StateMachineTracker
 			processMessage(m);
 			return;
 		}
+		if (m instanceof FeedbackMessage) {
+			processFeedback((FeedbackMessage) m);
+			return;
+		}
 		SNDMessage msg = (SNDMessage) m;
 		RequestProtocol proto = introductionSequences.get(msg.getIntroductionRequest());
 		if (proto == null) {
@@ -81,7 +86,15 @@ public class ClientProxy extends SNDNode //implements StateMachineTracker
 	}
 
 	@Override
-	public synchronized void processMessage(Message m) {
+	protected void processFeedback(FeedbackMessage m) {
+		System.out.println(this + " received " + m);
+//		System.out.println("Eventually, we will want to make the client aware that negative feedback has\n"
+//				+ "been received. And, if we have multiple clients we are routing,\n"
+//				+ "we may want to do a mini-reputation system here.");
+	}
+
+	@Override
+	protected synchronized void processMessage(Message m) {
 		if (m instanceof WrappedMessage) {
 			Message enc = ((WrappedMessage) m).getEnclosedMessage();
 			if (enc.getDst().equals(proxiedAppClient)) {

@@ -86,9 +86,17 @@ public interface Comms {
 	 * 
 	 * @param nbr The node to which this node has a VPN
 	 * @return The IntroductionRequest by which we know the neighbor.
-	 * @throws IOException if this node is not connected to the specified
-	 *                               neighbor.
+	 * @throws IOException if this node is not connected to the specified neighbor.
 	 */
 	public IntroductionRequest getIntroductionRequestForNeighbor(InetAddress nbr) throws IOException;
+
+	/**
+	 * Determine whether the node a) is a neighbor and b) is not introduced. I.e.,
+	 * return true if it is a long-lived VPN endpoint.
+	 * 
+	 * @param node
+	 * @return
+	 */
+	public boolean isNonIntroducedNeighbor(InetAddress node);
 
 }
