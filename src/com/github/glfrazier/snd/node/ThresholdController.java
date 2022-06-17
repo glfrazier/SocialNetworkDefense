@@ -9,7 +9,6 @@ import java.util.logging.Logger;
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
-import com.github.glfrazier.snd.protocol.Feedback;
 
 public class ThresholdController implements EventProcessor {
 

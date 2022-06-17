@@ -2,24 +2,39 @@ package com.github.glfrazier.snd.node;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Properties;
 
+import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventingSystem;
+import com.github.glfrazier.snd.protocol.IntroductionRequest;
+import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedWillRouteMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.WrappedMessage;
-import com.github.glfrazier.snd.simulation.SimComms;
 import com.github.glfrazier.snd.util.Implementation;
 
 public class ServerProxy extends SNDNode {
 
+	private static final Event SERVER_PROXY_MAINTENANCE_EVENT = new Event() {
+		private final String name = "ServerProxy Maintenance Event";
+
+		public String toString() {
+			return name;
+		}
+	};
 	private InetAddress proxiedAppServer;
 	private InetAddress finalIntroducer;
+	private Map<InetAddress, TimeAndIntroductionRequest> mostRecentIntroductionRequestForSrc;
 
 	public ServerProxy(InetAddress addr, Implementation impl, EventingSystem es, Properties props) {
 		super(addr, impl, es, props);
+		mostRecentIntroductionRequestForSrc = new LinkedHashMap<>();
+		eventingSystem.scheduleEventRelative(this, SERVER_PROXY_MAINTENANCE_EVENT, FEEDBACK_EXPIRATION_TIME / 10);
 	}
 
 	public void connectAppServer(InetAddress app) throws IOException {
@@ -82,10 +97,20 @@ public class ServerProxy extends SNDNode {
 			WrappedMessage wrapper = (WrappedMessage) m;
 			Message enclosed = wrapper.getEnclosedMessage();
 			if (!enclosed.getDst().equals(proxiedAppServer)) {
-				new Exception(this + ": Why did we receive " + m + "?").printStackTrace();
+				LOGGER.severe(this + ": Why did we receive " + m + "?");
 				return;
 			}
 			implementation.getComms().addRoute(enclosed.getSrc(), wrapper.getSrc());
+			try {
+				IntroductionRequest ir = implementation.getComms().getIntroductionRequestForNeighbor(wrapper.getSrc());
+				mostRecentIntroductionRequestForSrc.put(enclosed.getSrc(),
+						new TimeAndIntroductionRequest(eventingSystem.getCurrentTime(), ir));
+			} catch (IOException e) {
+				e.printStackTrace();
+				LOGGER.severe(
+						this + ": How could we have received a wrapped message but not have a link to the wrapper? msg="
+								+ m);
+			}
 			super.processMessage(wrapper);
 			return;
 		}
@@ -94,7 +119,8 @@ public class ServerProxy extends SNDNode {
 					.printStackTrace();
 			return;
 		}
-		// The comms.send() method will automagically wrap and forward messages from the AppServer.
+		// The comms.send() method will automagically wrap and forward messages from the
+		// AppServer.
 		try {
 			implementation.getComms().send(m);
 		} catch (IOException e) {
@@ -103,9 +129,76 @@ public class ServerProxy extends SNDNode {
 		}
 	}
 
-	
+	/**
+	 * The ServerProxy will only receive feedback from the app server it is proxying
+	 * for. The feedback message will contain a null IntroductionRequest, and the
+	 * subject it specifies may itself be a proxied client. The ServerProxy fixes it
+	 * all up and send the feedback to its "final" introducer.
+	 */
+	protected void processFeedback(FeedbackMessage m) {
+		if (!m.getSrc().equals(proxiedAppServer)) {
+			new Exception(this + " should only receive feedback messages from " + proxiedAppServer + "! : " + m)
+					.printStackTrace();
+			return;
+		}
+		IntroductionRequest introductionRequest = m.getIntroductionRequest();
+		if (introductionRequest != null) {
+			new Exception(this
+					+ ": feedback messages from the proxiedAppServer should contain null introduction requests: " + m)
+					.printStackTrace();
+			System.exit(-1);
+		}
+		InetAddress src = m.getSubject();
+		TimeAndIntroductionRequest tNreq = mostRecentIntroductionRequestForSrc.remove(src);
+		if (tNreq == null) {
+			LOGGER.warning(
+					this + " Received a feedback message about a connection that has expired or never was: " + m);
+			return;
+		}
+		FeedbackMessage fm = new FeedbackMessage(introductionRequest, getAddress(), src, m.getFeedback());
+		try {
+			implementation.getComms().send(fm);
+		} catch (IOException e) {
+			LOGGER.severe("Failed transmission: " + e);
+		}
+	}
+
 	@Override
 	public String toString() {
 		return "ServerProxy-" + getAddress();
+	}
+
+	@Override
+	public void process(Event e, EventingSystem eventingSystem) {
+		super.process(e, eventingSystem);
+		if (e == SERVER_PROXY_MAINTENANCE_EVENT) {
+			Thread t = new Thread() {
+				public void run() {
+					synchronized (mostRecentIntroductionRequestForSrc) {
+						long now = eventingSystem.getCurrentTime();
+						Iterator<InetAddress> iter = mostRecentIntroductionRequestForSrc.keySet().iterator();
+						while (iter.hasNext()) {
+							InetAddress src = iter.next();
+							TimeAndIntroductionRequest tNir = mostRecentIntroductionRequestForSrc.get(src);
+							if (now - tNir.time < FEEDBACK_EXPIRATION_TIME) {
+								break;
+							}
+							iter.remove();
+						}
+					}
+				}
+			};
+			t.start();
+		}
+	}
+
+	private static class TimeAndIntroductionRequest {
+		public long time;
+		public IntroductionRequest ir;
+
+		public TimeAndIntroductionRequest(long t, IntroductionRequest i) {
+			time = t;
+			ir = i;
+		}
 	}
 }

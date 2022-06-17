@@ -11,7 +11,6 @@ import java.util.TreeSet;
 import java.util.logging.Logger;
 
 import com.github.glfrazier.event.EventingSystem;
-import com.github.glfrazier.snd.protocol.Feedback;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.Pedigree;
 
@@ -124,15 +123,15 @@ public class ReputationModule {
 		case BAD:
 			dRep = BAD_FEEDBACK_DECREMENT_BASE;
 			break;
-		case NOT_BAD:
-			dRep = NOMINAL_FEEDBACK_INCREMENT_BASE;
-			break;
-		case GOOD:
-			dRep = GOOD_FEEDBACK_INCREMENT_BASE;
-			break;
-		case NOOP:
-			dRep = 0;
-			break;
+//		case NOT_BAD:
+//			dRep = NOMINAL_FEEDBACK_INCREMENT_BASE;
+//			break;
+//		case GOOD:
+//			dRep = GOOD_FEEDBACK_INCREMENT_BASE;
+//			break;
+//		case NOOP:
+//			dRep = 0;
+//			break;
 		}
 		adjustReputation(pedigree.getSubject(), dRep);
 		dRep /= 4;

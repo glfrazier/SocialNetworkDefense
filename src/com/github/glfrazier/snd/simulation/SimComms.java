@@ -174,4 +174,15 @@ public class SimComms implements Comms {
 		longLivedVPNs.remove(vpn.getRemote());
 		introducedVPNs.remove(vpn.getRemote());
 	}
+
+	@Override
+	public synchronized IntroductionRequest getIntroductionRequestForNeighbor(InetAddress nbr) throws IOException {
+		if (longLivedVPNs.containsKey(nbr)) {
+			return null;
+		}
+		if (introducedVPNs.containsKey(nbr)) {
+			return introducedVPNs.get(nbr).getIntroductionRequest();
+		}
+		throw new IOException("Not connected to " + nbr);
+	}
 }

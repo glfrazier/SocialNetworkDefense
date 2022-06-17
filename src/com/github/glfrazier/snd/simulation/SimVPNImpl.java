@@ -223,4 +223,8 @@ public class SimVPNImpl implements VPN, EventProcessor {
 		return stringRep;
 	}
 
+	public IntroductionRequest getIntroductionRequest() {
+		return introductionRequest;
+	}
+
 }

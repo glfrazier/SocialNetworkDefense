@@ -21,11 +21,11 @@ public class IntroductionRequest implements Serializable {
 	private final long nonce;
 	private transient String stringValue;
 
-	public IntroductionRequest(InetAddress r, InetAddress i, InetAddress t) {
-		requester = r;
-		introducer = i;
-		destination = t;
-		nonce = INDEX.getAndIncrement();
+	public IntroductionRequest(InetAddress requester, InetAddress introducer, InetAddress destination) {
+		this.requester = requester;
+		this.introducer = introducer;
+		this.destination = destination;
+		this.nonce = INDEX.getAndIncrement();
 	}
 
 	public int hashCode() {
@@ -36,9 +36,9 @@ public class IntroductionRequest implements Serializable {
 		if (!(o instanceof IntroductionRequest)) {
 			return false;
 		}
-		IntroductionRequest intro = (IntroductionRequest) o;
-		return requester.equals(intro.requester) && introducer.equals(intro.introducer)
-				&& destination.equals(intro.destination) && nonce == intro.nonce;
+		IntroductionRequest ir = (IntroductionRequest) o;
+		return requester.equals(ir.requester) && introducer.equals(ir.introducer)
+				&& destination.equals(ir.destination) && nonce == ir.nonce;
 	}
 
 	public String toString() {

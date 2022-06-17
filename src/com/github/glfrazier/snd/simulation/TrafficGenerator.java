@@ -18,6 +18,10 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 			return "Wakeup a traffic generator.";
 		}
 	};
+	
+	public static final String BENIGN_CONTENT = "Benign Content";
+	public static final String ATTACK_CONTENT = "Attack Content";
+	
 	private InetAddress address;
 	private SimVPNImpl vpnToClient;
 	private float exponentialRate;

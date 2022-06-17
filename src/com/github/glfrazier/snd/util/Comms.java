@@ -3,6 +3,8 @@ package com.github.glfrazier.snd.util;
 import java.io.IOException;
 import java.net.InetAddress;
 
+import com.github.glfrazier.snd.node.MessageReceiver;
+import com.github.glfrazier.snd.node.SNDNode;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.message.Message;
 
@@ -77,5 +79,16 @@ public interface Comms {
 	 * @param vpn
 	 */
 	public void vpnClosed(VPN vpn);
+
+	/**
+	 * Obtain the IntroductionRequest that resulted in there being a VPN to the
+	 * specified neighbor.
+	 * 
+	 * @param nbr The node to which this node has a VPN
+	 * @return The IntroductionRequest by which we know the neighbor.
+	 * @throws IOException if this node is not connected to the specified
+	 *                               neighbor.
+	 */
+	public IntroductionRequest getIntroductionRequestForNeighbor(InetAddress nbr) throws IOException;
 
 }
