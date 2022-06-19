@@ -62,14 +62,10 @@ public class SimComms implements Comms {
 		return getRouteTo(dst) != null;
 	}
 
+	//@Override
 	private synchronized InetAddress getRouteTo(InetAddress dst) {
-		SimVPNImpl vpn = longLivedVPNs.get(dst);
-		if (vpn != null) {
-			return vpn.getRemote();
-		}
-		vpn = introducedVPNs.get(dst);
-		if (vpn != null) {
-			return vpn.getRemote();
+		if(longLivedVPNs.containsKey(dst) || introducedVPNs.containsKey(dst)) {
+			return dst;
 		}
 		InetAddress route = routes.get(dst);
 		if (route == null) {
@@ -120,10 +116,8 @@ public class SimComms implements Comms {
 			System.exit(-1);
 		}
 		if (introducedVPNs.containsKey(nbr)) {
-			System.err.println(this + ": Why were we re-introduced to an introduced neighbor!?");
-			System.err.println("\tvpn=" + introducedVPNs.get(nbr) + ", nbr=" + nbr + ", request=" + request);
-			new Exception().printStackTrace();
-			System.exit(-1);
+			SimVPNImpl existingVPN = introducedVPNs.get(nbr);
+			existingVPN.addIntroductionRequest(request);
 		}
 		SimVPNImpl vpn = (SimVPNImpl) owner.getImplementation().getVpnFactory().createIntroducedVPN(nbr, request,
 				keyingMaterial);
@@ -172,12 +166,16 @@ public class SimComms implements Comms {
 	}
 
 	@Override
-	public synchronized IntroductionRequest getIntroductionRequestForNeighbor(InetAddress nbr) throws IOException {
+	public synchronized IntroductionRequest getIntroductionRequestForNeighbor(InetAddress nbr, InetAddress requester,
+			InetAddress destination) throws IOException {
+		if (!nbr.equals(requester)) {
+			new Exception("Why are nbr (" + nbr + ") and requester (" + requester + ") different?").printStackTrace();
+		}
 		if (longLivedVPNs.containsKey(nbr)) {
 			return null;
 		}
 		if (introducedVPNs.containsKey(nbr)) {
-			return introducedVPNs.get(nbr).getIntroductionRequest();
+			return introducedVPNs.get(nbr).getIntroductionRequest(requester, destination);
 		}
 		throw new IOException("Not connected to " + nbr);
 	}

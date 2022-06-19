@@ -5,6 +5,7 @@ import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.protocol.ClientConnectToServerProtocol;
@@ -17,9 +18,7 @@ import com.github.glfrazier.snd.protocol.message.WrappedMessage;
 import com.github.glfrazier.snd.util.Implementation;
 
 public class ClientProxy extends SNDNode // implements StateMachineTracker
-
 {
-
 	private InetAddress proxiedAppClient;
 	private InetAddress initialIntroducer;
 	private Map<IntroductionRequest, RequestProtocol> introductionSequences = new HashMap<>();

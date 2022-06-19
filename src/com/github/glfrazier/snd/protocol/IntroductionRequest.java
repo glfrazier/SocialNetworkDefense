@@ -10,8 +10,8 @@ public class IntroductionRequest implements Serializable {
 
 	private static final long serialVersionUID = 1L;
 
-	private static final AtomicLong INDEX = new AtomicLong(0);
-
+	private static final AtomicLong NONCE_GENERATOR = new AtomicLong(0);
+	
 	public static final IntroductionRequest SAMPLE_INTRODUCTION_REQUEST = new IntroductionRequest(
 			AddressUtils.ZERO_IPv4_ADDRESS, AddressUtils.ZERO_IPv4_ADDRESS, AddressUtils.ZERO_IPv4_ADDRESS);
 	
@@ -25,7 +25,7 @@ public class IntroductionRequest implements Serializable {
 		this.requester = requester;
 		this.introducer = introducer;
 		this.destination = destination;
-		this.nonce = INDEX.getAndIncrement();
+		this.nonce = NONCE_GENERATOR.getAndIncrement();
 	}
 
 	public int hashCode() {

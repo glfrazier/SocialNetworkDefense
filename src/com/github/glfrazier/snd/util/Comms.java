@@ -81,14 +81,17 @@ public interface Comms {
 	public void vpnClosed(VPN vpn);
 
 	/**
-	 * Obtain the IntroductionRequest that resulted in there being a VPN to the
+	 * Obtain one of the IntroductionRequests that resulted in there being a VPN to the
 	 * specified neighbor.
 	 * 
-	 * @param nbr The node to which this node has a VPN
+	 * @param nbr         The node to which this node has a VPN
+	 * @param requester   The requester for the desired IntroductionRequest
+	 * @param destination The destination for the desired IntroductionRequest
 	 * @return The IntroductionRequest by which we know the neighbor.
 	 * @throws IOException if this node is not connected to the specified neighbor.
 	 */
-	public IntroductionRequest getIntroductionRequestForNeighbor(InetAddress nbr) throws IOException;
+	public IntroductionRequest getIntroductionRequestForNeighbor(InetAddress nbr, InetAddress requester,
+			InetAddress destination) throws IOException;
 
 	/**
 	 * Determine whether the node a) is a neighbor and b) is not introduced. I.e.,
@@ -98,5 +101,6 @@ public interface Comms {
 	 * @return
 	 */
 	public boolean isNonIntroducedNeighbor(InetAddress node);
+
 
 }

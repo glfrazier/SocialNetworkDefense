@@ -95,7 +95,11 @@ public class ServerProxy extends SNDNode {
 			}
 			implementation.getComms().addRoute(enclosed.getSrc(), wrapper.getSrc());
 			try {
-				IntroductionRequest ir = implementation.getComms().getIntroductionRequestForNeighbor(wrapper.getSrc());
+				IntroductionRequest ir = implementation.getComms().getIntroductionRequestForNeighbor( //
+						wrapper.getSrc(), // The neighbor for which we want the introduction request that connected us
+						wrapper.getSrc(), // The node that was the requester
+						enclosed.getDst() // The destination they were attempting to reach
+						);
 				mostRecentIntroductionRequestForSrc.put(enclosed.getSrc(),
 						new TimeAndIntroductionRequest(eventingSystem.getCurrentTime(), ir));
 			} catch (IOException e) {
@@ -144,6 +148,7 @@ public class ServerProxy extends SNDNode {
 			}
 		}
 		InetAddress src = m.getSubject();
+		//InetAddress requester = implementation.getComms().getRouteTo(src);
 		TimeAndIntroductionRequest tNreq = mostRecentIntroductionRequestForSrc.remove(src);
 		if (tNreq == null) {
 			LOGGER.warning(

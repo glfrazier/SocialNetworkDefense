@@ -233,6 +233,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 	}
 
 	protected void processFeedback(FeedbackMessage m) {
+		System.out.println(this + " received " + m);
 		IntroductionRequest introductionRequest = m.getIntroductionRequest();
 		if (!pendingFeedbacksToReceive.containsKey(introductionRequest)) {
 			LOGGER.severe(this + ": Received feedback for a transaction that is not pending feedback. m=" + m);
@@ -261,7 +262,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 			try {
 				FeedbackMessage fm = new FeedbackMessage(previousIntroduction, getAddress(), m.getSubject(),
 						m.getFeedback());
-				//System.out.println(this + " sending (fwding) " + fm);
+				// System.out.println(this + " sending (fwding) " + fm);
 				implementation.getComms().send(fm);
 			} catch (IOException e) {
 				LOGGER.severe(this + ": Failed transmission: " + e);
@@ -278,9 +279,8 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 			if (implementation.getComms().isNonIntroducedNeighbor(introductionRequest.requester)) {
 				// We are connected to the requester -- forward the feedback to them!
 				try {
-					implementation.getComms().send(
-							new FeedbackMessage(introductionRequest.requester, getAddress(),
-									m.getSubject(), m.getFeedback()));
+					implementation.getComms().send(new FeedbackMessage(introductionRequest.requester, getAddress(),
+							m.getSubject(), m.getFeedback()));
 				} catch (IOException e) {
 					LOGGER.severe(this + ": Failed transmission: " + e);
 					new Exception(this + ": Failed transmission: " + e).printStackTrace();
@@ -297,9 +297,9 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 
 	protected void processIntroductionOffer(IntroductionOfferMessage m) {
 		Pedigree p = m.getPedigree();
-		//System.out.println(this + " received " + m + " with pedigree " + p);
+		// System.out.println(this + " received " + m + " with pedigree " + p);
 		p = p.getNext(m.getIntroductionRequest());
-		//System.out.println("\tpedigree is now " + p);
+		// System.out.println("\tpedigree is now " + p);
 		addPedigree(p);
 		if (reputationModule.reputationIsGreaterThanThreshold(p)) {
 			// If the client's reputation is above threshold, create a transaction-specific
@@ -329,8 +329,9 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 	private void processTargetResponse(SNDMessage msg) {
 		try {
 			if (msg instanceof IntroductionAcceptedMessage) {
-				IntroductionRequest previousIntroduction = implementation.getComms()
-						.getIntroductionRequestForNeighbor(msg.getIntroductionRequest().requester);
+				IntroductionRequest previousIntroduction = implementation.getComms().getIntroductionRequestForNeighbor(
+						msg.getIntroductionRequest().requester, msg.getIntroductionRequest().requester,
+						msg.getIntroductionRequest().destination);
 				implementation.getComms()
 						.send(new IntroductionCompletedMessage(msg.getIntroductionRequest(), msg.getSrc()));
 				pendingFeedbacksToReceive.put(msg.getIntroductionRequest(),
@@ -362,7 +363,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 							+ "\tir=" + ir + ", m=" + m);
 		} else {
 			Pedigree p = getPedigree(ir.requester);
-			//System.out.println(this + " received " + ir + ", pedigree=" + p);
+			// System.out.println(this + " received " + ir + ", pedigree=" + p);
 			if (reputationModule.reputationIsGreaterThanThreshold(p)) {
 				DiscoveryService.Query query = implementation.getDiscoveryService().createQuery(m.getServerAddress());
 				// TODO Create a state machine for handling introduction requests, and add the
