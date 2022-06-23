@@ -1,8 +1,9 @@
 # dot files (e.g., .classpath)
 .*
 
-# bin directory
+# directories to ignore
 bin/
+results/
 
 # Compiled class file
 *.class
@@ -12,9 +13,6 @@ bin/
 
 # BlueJ files
 *.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
 
 # Package Files #
 *.jar

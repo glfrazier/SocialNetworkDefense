@@ -62,9 +62,9 @@ public class SimComms implements Comms {
 		return getRouteTo(dst) != null;
 	}
 
-	//@Override
+	// @Override
 	private synchronized InetAddress getRouteTo(InetAddress dst) {
-		if(longLivedVPNs.containsKey(dst) || introducedVPNs.containsKey(dst)) {
+		if (longLivedVPNs.containsKey(dst) || introducedVPNs.containsKey(dst)) {
 			return dst;
 		}
 		InetAddress route = routes.get(dst);
@@ -175,7 +175,8 @@ public class SimComms implements Comms {
 			return null;
 		}
 		if (introducedVPNs.containsKey(nbr)) {
-			return introducedVPNs.get(nbr).getIntroductionRequest(requester, destination);
+			return introducedVPNs.get(nbr).getIntroductionRequest(// requester,
+					destination);
 		}
 		throw new IOException("Not connected to " + nbr);
 	}

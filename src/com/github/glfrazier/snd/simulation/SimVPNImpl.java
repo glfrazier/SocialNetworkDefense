@@ -241,12 +241,14 @@ public class SimVPNImpl implements VPN, EventProcessor {
 		return stringRep;
 	}
 
-	public synchronized IntroductionRequest getIntroductionRequest(InetAddress requester, InetAddress destination) {
+	public synchronized IntroductionRequest getIntroductionRequest(//InetAddress requester, 
+			InetAddress destination) {
 		if (introductionRequests == null || introductionRequests.isEmpty()) {
 			return null;
 		}
 		for (IntroductionRequest ir : introductionRequests) {
-			if (ir.requester.equals(requester) && ir.destination.equals(destination)) {
+			if (//ir.requester.equals(requester) && 
+					ir.destination.equals(destination)) {
 				return ir;
 			}
 		}

@@ -92,7 +92,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 		this.eventingSystem = eventingSystem;
 		this.reputationModule = new ReputationModule(eventingSystem, this);
 		this.implementation = implementation;
-		this.verbose = getBooleanProperty("snd.node.verbose", false);
+		this.verbose = getBooleanProperty("snd.node.verbose", "false");
 		eventingSystem.scheduleEventRelative(this, NODE_MAINTENANCE_EVENT,
 				MAINTENANCE_INTERVAL + Math.abs(address.hashCode() % 100));
 	}
@@ -112,7 +112,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 		return PropertyParser.getFloatProperty(propName, properties);
 	}
 
-	public boolean getBooleanProperty(String propName, boolean defaultValue) {
+	public boolean getBooleanProperty(String propName, String defaultValue) {
 		return PropertyParser.getBooleanProperty(propName, defaultValue, properties);
 	}
 

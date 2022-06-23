@@ -12,6 +12,8 @@ import com.github.glfrazier.snd.util.VPN;
 
 public class TrafficReceiver implements MessageReceiver {
 
+	public static final String RESPONSE_TO_BAD_MESSAGE = "This is a response to an attack message.";
+	public static final String RESPONSE_TO_GOOD_MESSAGE = "This is a response to a benign message.";
 	private float falsePositiveRate;
 	private float falseNegativeRate;
 	private Simulation sim;
@@ -19,12 +21,14 @@ public class TrafficReceiver implements MessageReceiver {
 
 	private SimVPNImpl vpnToProxy;
 	private InetAddress address;
+	private Statistics stats;
 
 	public TrafficReceiver(InetAddress address, float falsePositiveRate, float falseNegativeRate, Simulation sim) {
 		this.address = address;
 		this.falsePositiveRate = falsePositiveRate;
 		this.falseNegativeRate = falseNegativeRate;
 		this.sim = sim;
+		this.stats = sim.getStats();
 	}
 
 	@Override
@@ -36,18 +40,24 @@ public class TrafficReceiver implements MessageReceiver {
 	public void receive(Message m) {
 		Message response = null;
 		if (TrafficGenerator.ATTACK_CONTENT.equals(m.getContent())) {
+			stats.badMessageReceived();
 			if (random.nextFloat() > falseNegativeRate) {
 				// It was an attack and we detected the attack
 				response = new FeedbackMessage(address, m.getSrc(), Feedback.BAD);
 			}
 		} else {
+			stats.goodMessageReceived();
 			if (random.nextFloat() < falsePositiveRate) {
 				// It was not an attack, but we thought it was
 				response = new FeedbackMessage(address, m.getSrc(), Feedback.BAD);
 			}
 		}
 		if (response == null) {
-			response = new Message(m.getSrc(), getAddress(), "Response!");
+			if (TrafficGenerator.ATTACK_CONTENT.equals(m.getContent())) {
+				response = new Message(m.getSrc(), getAddress(), RESPONSE_TO_BAD_MESSAGE);
+			} else {
+				response = new Message(m.getSrc(), getAddress(), RESPONSE_TO_GOOD_MESSAGE);
+			}
 		}
 		sim.printEvent(this + " received " + m + " and is responding with " + response);
 		try {

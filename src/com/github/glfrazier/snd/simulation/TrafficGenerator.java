@@ -18,21 +18,24 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 			return "Wakeup a traffic generator.";
 		}
 	};
-	
+
 	public static final String BENIGN_CONTENT = "Benign Content";
 	public static final String ATTACK_CONTENT = "Attack Content";
-	
+
 	private InetAddress address;
 	private SimVPNImpl vpnToClient;
 	private float exponentialRate;
 
 	private Random random;
 	private Simulation sim;
+	private Statistics stats;
+	private long endTime;
 
-	public TrafficGenerator(InetAddress addr, Simulation sim,
-			EventingSystem es) {
+	public TrafficGenerator(InetAddress addr, Simulation sim, EventingSystem es) {
 		address = addr;
 		this.sim = sim;
+		this.stats = sim.getStats();
+		this.endTime = sim.getEndTime();
 		exponentialRate = sim.getFloatProperty("snd.sim.client_traffic_exponential");
 		long seed = sim.getSeed();
 		random = new Random();
@@ -43,7 +46,7 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 	public void attachToProxy(SimVPNImpl vpn) {
 		this.vpnToClient = vpn;
 	}
-	
+
 	private long getDelayToNextEvent() {
 		double u = random.nextDouble();
 		double x = -Math.log(1 - u) / exponentialRate;
@@ -64,17 +67,37 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 			System.err.println("Why did " + this + " receive " + m + "!?");
 			System.exit(-1);
 		}
-		// TODO record statistics
+		if (TrafficReceiver.RESPONSE_TO_BAD_MESSAGE.equals(m.getContent())) {
+			stats.responseToBadMessageReceived();
+		} else {
+			stats.responseToGoodMessageReceived();
+		}
 		sim.printEvent(this + " received " + m);
 	}
 
 	@Override
 	public void process(Event e, EventingSystem es) {
+
+		if (endTime - es.getCurrentTime() < 1000) {
+			// Do not initiate a new message within one second of the end of the simulation.
+			// The message disposition statistics all sum up if every message has reached
+			// its destination or been rejected.
+			return;
+		}
 		// choose a destination
-		InetAddress destination = sim.chooseServer();
+		Simulation.MessageMetaData mmd = sim.getNextMessageToSend(this.getAddress());
+
+		String content = null;
+		if (mmd.isAttack) {
+			content = ATTACK_CONTENT;
+			stats.badMessageSent();
+		} else {
+			content = BENIGN_CONTENT;
+			stats.goodMessageSent();
+		}
 
 		// send a message
-		Message msg = new Message(destination, address, "Good Behavior");
+		Message msg = new Message(mmd.destination, address, content);
 		sim.printEvent(this + " sending " + msg);
 		try {
 			vpnToClient.send(msg);
@@ -87,7 +110,7 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 
 		// schedule the next transmission
 		long delta = getDelayToNextEvent();
-		System.out.println("\t\tDelay to next transmission: " + ((float)delta/1000.0) + " seconds.");
+		System.out.println("\t\tDelay to next transmission: " + ((float) delta / 1000.0) + " seconds.");
 		es.scheduleEventRelative(this, WAKEUP_EVENT, delta);
 	}
 
