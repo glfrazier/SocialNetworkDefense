@@ -1,11 +1,12 @@
 package com.github.glfrazier.snd.node;
 
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.atomic.AtomicLong;
 
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.protocol.ClientConnectToServerProtocol;
@@ -151,7 +152,7 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 
 	@Override
 	public String toString() {
-		return "ClientProxy-" + getAddress();
+		return "ClientProxy-" + addrToString(getAddress());
 	}
 
 	public void registerProtocol(RequestProtocol intro) {

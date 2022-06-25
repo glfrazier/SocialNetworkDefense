@@ -75,7 +75,9 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		} else {
 			stats.responseToGoodMessageReceived();
 		}
-		sim.printEvent(this + " received " + m);
+		if (sim.verbose) {
+			sim.printEvent(this + " received " + m);
+		}
 	}
 
 	@Override
@@ -101,7 +103,9 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 
 		// send a message
 		Message msg = new Message(mmd.destination, address, content);
-		sim.printEvent(this + " sending " + msg);
+		if (sim.verbose) {
+			sim.printEvent(this + " sending " + msg);
+		}
 		try {
 			vpnToClient.send(msg);
 		} catch (IOException e1) {
@@ -113,7 +117,9 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 
 		// schedule the next transmission
 		long delta = getDelayToNextEvent();
-		System.out.println("\t\tDelay to next transmission: " + ((float) delta / 1000.0) + " seconds.");
+		if (sim.verbose) {
+			System.out.println("\t\tDelay to next transmission: " + ((float) delta / 1000.0) + " seconds.");
+		}
 		es.scheduleEventRelative(this, WAKEUP_EVENT, delta);
 	}
 

@@ -1,5 +1,7 @@
 package com.github.glfrazier.snd.node;
 
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Collections;
@@ -399,7 +401,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 
 	@Override
 	public String toString() {
-		return "Node-" + getAddress();
+		return "Node-" + addrToString(getAddress());
 	}
 
 	public EventingSystem getEventingSystem() {

@@ -112,7 +112,7 @@ public class ButterflyNetwork {
 	private Set<InetAddress> recursiveGetNextStepsTo(InetAddress end, InetAddress start) {
 		Set<InetAddress> result = new HashSet<>();
 		IntroducerProxy dstIntroducer = addressMap.get(end);
-		for (int i = 0; i < numPorts; i++) {
+		for (int i = 0; i < dstIntroducer.inPorts.length; i++) {
 			IntroducerProxy p = dstIntroducer.inPorts[i];
 			if (p.address.equals(start)) {
 				result.add(end);

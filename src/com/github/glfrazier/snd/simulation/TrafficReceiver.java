@@ -60,7 +60,9 @@ public class TrafficReceiver implements MessageReceiver {
 				response = new Message(m.getSrc(), getAddress(), RESPONSE_TO_GOOD_MESSAGE);
 			}
 		}
-		sim.printEvent(this + " received " + m + " and is responding with " + response);
+		if (sim.verbose) {
+			sim.printEvent(this + " received " + m + " and is responding with " + response);
+		}
 		try {
 			vpnToProxy.send(response);
 		} catch (IOException e) {

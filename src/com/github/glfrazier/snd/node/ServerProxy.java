@@ -1,5 +1,7 @@
 package com.github.glfrazier.snd.node;
 
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Iterator;
@@ -99,7 +101,7 @@ public class ServerProxy extends SNDNode {
 						wrapper.getSrc(), // The neighbor for which we want the introduction request that connected us
 						wrapper.getSrc(), // The node that was the requester
 						enclosed.getDst() // The destination they were attempting to reach
-						);
+				);
 				mostRecentIntroductionRequestForSrc.put(enclosed.getSrc(),
 						new TimeAndIntroductionRequest(eventingSystem.getCurrentTime(), ir));
 			} catch (IOException e) {
@@ -148,7 +150,7 @@ public class ServerProxy extends SNDNode {
 			}
 		}
 		InetAddress src = m.getSubject();
-		//InetAddress requester = implementation.getComms().getRouteTo(src);
+		// InetAddress requester = implementation.getComms().getRouteTo(src);
 		TimeAndIntroductionRequest tNreq = mostRecentIntroductionRequestForSrc.remove(src);
 		if (tNreq == null) {
 			LOGGER.warning(
@@ -165,7 +167,7 @@ public class ServerProxy extends SNDNode {
 
 	@Override
 	public String toString() {
-		return "ServerProxy-" + getAddress();
+		return "ServerProxy-" + addrToString(getAddress());
 	}
 
 	@Override

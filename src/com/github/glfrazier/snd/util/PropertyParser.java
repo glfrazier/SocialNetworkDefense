@@ -54,6 +54,10 @@ public class PropertyParser {
 		return 0;
 	}
 
+	public static boolean getBooleanProperty(String propName, boolean defaultValue, Properties properties) {
+		return getBooleanProperty(propName, Boolean.toString(defaultValue), properties);
+	}
+
 	public static boolean getBooleanProperty(String propName, String defaultValue, Properties properties) {
 		if (!properties.containsKey(propName)) {
 			properties.setProperty(propName, defaultValue);

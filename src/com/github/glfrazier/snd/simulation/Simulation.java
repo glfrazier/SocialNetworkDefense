@@ -33,10 +33,17 @@ public class Simulation {
 	private float attackProb;
 	private long endTime;
 	private TrafficReceiver[] victims;
+	public boolean verbose;
 
 	public Simulation(Properties properties) throws Exception {
 		this.properties = properties;
 
+		if (getBooleanProperty("snd.sim.verbose", false)) {
+			verbose = true;
+			// eventingSystem.setVerbose(true);
+			properties.setProperty("snd.node.verbose", "true");
+		}
+		
 		// load the properties
 		Properties sysProps = new Properties();
 		for (Object key : System.getProperties().keySet()) {
@@ -68,15 +75,10 @@ public class Simulation {
 		}
 
 		attackProb = getProbabilityProperty("snd.sim.attack_probability");
-		
+
 		// Construct the eventing system. Since this is a simulation, we are *NOT*
 		// running the EventingSystem in realtime.
 		eventingSystem = new EventingSystem(EventingSystem.NOT_REALTIME);
-		if (properties.containsKey("snd.sim.verbose")
-				&& !properties.getProperty("snd.sim.verbose").equalsIgnoreCase("false")) {
-			eventingSystem.setVerbose(true);
-			properties.setProperty("snd.node.verbose", "true");
-		}
 		stats = new Statistics(properties);
 		endTime = getLongProperty("snd.sim.end_time");
 		eventingSystem.setEndTime(endTime);
@@ -103,7 +105,9 @@ public class Simulation {
 					impl.setNode(introducer);
 					introducers.add(introducer);
 					introducerMap.put(address, introducer);
-					System.out.println("Constructed " + introducer);
+					if (verbose) {
+						System.out.println("Constructed " + introducer);
+					}
 				}
 			}
 			for (int i = 0; i < introducers.size() - 1; i++) {
@@ -154,7 +158,9 @@ public class Simulation {
 				if (index == rowsOfIntroducers) {
 					index = 0;
 				}
-				System.out.println("Constructed " + serverProxy + " and connected it to " + introAddr);
+				if (verbose) {
+					System.out.println("Constructed " + serverProxy + " and connected it to " + introAddr);
+				}
 			}
 		}
 
@@ -187,7 +193,9 @@ public class Simulation {
 				if (index == rowsOfIntroducers) {
 					index = 0;
 				}
-				System.out.println("Constructed " + clientProxy + " and connected it to " + introAddr);
+				if (verbose) {
+					System.out.println("Constructed " + clientProxy + " and connected it to " + introAddr);
+				}
 			}
 		}
 
@@ -251,7 +259,7 @@ public class Simulation {
 				attacker.setAttacker();
 			}
 		}
-		
+
 		// Assign attackers and victims
 		int numberOfVictims = getIntegerProperty("snd.sim.number_of_victims", servers.size());
 		if (numberOfVictims > servers.size()) {
@@ -268,10 +276,14 @@ public class Simulation {
 				TrafficReceiver victim = candidates.remove(simRandom.nextInt(candidates.size()));
 				ltr.add(victim);
 			}
-			victims = (TrafficReceiver[])ltr.toArray(new TrafficReceiver[0]);
+			victims = (TrafficReceiver[]) ltr.toArray(new TrafficReceiver[0]);
 		}
 		// construct the statistics-gathering module
 
+	}
+
+	private boolean getBooleanProperty(String propName, boolean defaultValue) {
+		return PropertyParser.getBooleanProperty(propName, defaultValue, properties);
 	}
 
 	private int getIntegerProperty(String propName, int defaultValue) {
@@ -449,7 +461,7 @@ public class Simulation {
 		InetAddress destination = null;
 		boolean isAttack = false;
 		if (sender.isAttacker()) {
-			isAttack =  simRandom.nextFloat() < attackProb;
+			isAttack = simRandom.nextFloat() < attackProb;
 		}
 		if (isAttack) {
 			destination = victims[simRandom.nextInt(victims.length)].getAddress();
@@ -458,7 +470,6 @@ public class Simulation {
 		}
 		return new MessageMetaData(destination, isAttack);
 	}
-
 
 	public long getEndTime() {
 		return endTime;
