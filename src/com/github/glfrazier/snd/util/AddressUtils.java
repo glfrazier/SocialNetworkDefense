@@ -5,6 +5,41 @@ import java.net.UnknownHostException;
 
 public class AddressUtils {
 
+	public static String addrToString(InetAddress addr) {
+		String result = addr.toString();
+		String ww = result;
+		if (ww.startsWith("/")) {
+			ww = ww.substring(1);
+		}
+		if (ww.contains(":")) {
+			String[] tokens = ww.split(":");
+			int index = 1;
+			for (; index < tokens.length - 1 && (!tokens[index].equals("0") && !tokens[index].equals("00")); index++)
+				;
+			if (index == tokens.length) {
+				return result;
+			}
+			int start = index;
+			for (; index < tokens.length - 1 && (tokens[index].equals("0") || tokens[index].equals("00")); index++)
+				;
+			int end = index;
+			if (end == start + 1) {
+				return result;
+			}
+			StringBuffer newResult = new StringBuffer(tokens[0]);
+			for (int i = 1; i < start; i++) {
+				newResult.append(':').append(tokens[i]);
+			}
+			newResult.append(':');
+			for (int i = end; i < tokens.length; i++) {
+				newResult.append(':').append(tokens[i]);
+			}
+			StringBuffer x = new StringBuffer("/").append(newResult);
+			result = x.toString();
+		}
+		return result;
+	}
+
 	public static InetAddress ZERO_IPv4_ADDRESS;
 	static {
 		try {
@@ -61,5 +96,10 @@ public class AddressUtils {
 				return result;
 		}
 		return 0;
+	}
+
+	public static void main(String[] args) throws Exception {
+		byte[] b1 = { 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1 };
+		System.out.println(InetAddress.getByAddress(b1) + " ==> " + addrToString(InetAddress.getByAddress(b1)));
 	}
 }

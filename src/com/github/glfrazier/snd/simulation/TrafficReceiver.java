@@ -1,5 +1,6 @@
 package com.github.glfrazier.snd.simulation;
 
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Random;
@@ -70,7 +71,7 @@ public class TrafficReceiver implements MessageReceiver {
 
 	@Override
 	public String toString() {
-		return "TrafficReceiver<" + address + ">";
+		return "TrafficReceiver<" + addrToString(address) + ">";
 	}
 
 	public void attachToServer(SimVPNImpl vpn) {

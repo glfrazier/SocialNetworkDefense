@@ -5,7 +5,6 @@ import static com.github.glfrazier.snd.util.AddressUtils.incrementAddress;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -13,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
-import java.util.Set;
 
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.ClientProxy;
@@ -28,14 +26,13 @@ public class Simulation {
 	private Properties properties;
 	private List<ClientProxy> clients = new ArrayList<>();
 	private List<ServerProxy> servers = new ArrayList<>();
-	private Set<TrafficGenerator> appClients = new HashSet<>();
-	private Set<TrafficGenerator> goodAppClients;
-	private Set<TrafficGenerator> badAppClients;
+	private TrafficGenerator[] appClients;
 	private TrafficReceiver[] appServers;
 	private Random simRandom;
 	private Statistics stats;
-	private Map<InetAddress, Float> attackProbs;
+	private float attackProb;
 	private long endTime;
+	private TrafficReceiver[] victims;
 
 	public Simulation(Properties properties) throws Exception {
 		this.properties = properties;
@@ -70,8 +67,8 @@ public class Simulation {
 			simRandom.setSeed(getLongProperty("snd.sim.seed"));
 		}
 
-		attackProbs = new HashMap<>();
-		String[] attackers = getListProperty("snd.sim.attack_clients", "");
+		attackProb = getProbabilityProperty("snd.sim.attack_probability");
+		
 		// Construct the eventing system. Since this is a simulation, we are *NOT*
 		// running the EventingSystem in realtime.
 		eventingSystem = new EventingSystem(EventingSystem.NOT_REALTIME);
@@ -129,7 +126,8 @@ public class Simulation {
 
 		// construct server proxies and link them to appropriate introducers
 		InetAddress firstServerAddress = incrementAddress(topology.getLastAddress());
-		firstServerAddress = getIPAddressProperty("snd.sim.first_server_address", firstServerAddress.toString().substring(1));
+		firstServerAddress = getIPAddressProperty("snd.sim.first_server_address",
+				firstServerAddress.toString().substring(1));
 		InetAddress lastServerAddress = null;
 		int numberOfServers = getIntegerProperty("snd.sim.number_of_servers");
 		if (true) {
@@ -163,7 +161,8 @@ public class Simulation {
 		// construct client proxies and link them to appropriate introducers
 		int numberOfClients = getIntegerProperty("snd.sim.number_of_clients");
 		InetAddress firstClientAddress = incrementAddress(lastServerAddress);
-		firstClientAddress = getIPAddressProperty("snd.sim.first_client_address", firstClientAddress.toString().substring(1));
+		firstClientAddress = getIPAddressProperty("snd.sim.first_client_address",
+				firstClientAddress.toString().substring(1));
 		InetAddress lastClientAddress = null;
 		if (true) {
 			InetAddress clientAddress = firstClientAddress;
@@ -194,7 +193,8 @@ public class Simulation {
 
 		// construct app servers (TrafficReceivers) and connect them to ServerProxies
 		InetAddress firstReceiverAddress = incrementAddress(lastClientAddress);
-		firstReceiverAddress = getIPAddressProperty("snd.sim.first_appserver_address", firstReceiverAddress.toString().substring(1));
+		firstReceiverAddress = getIPAddressProperty("snd.sim.first_appserver_address",
+				firstReceiverAddress.toString().substring(1));
 		InetAddress lastReceiverAddress = null;
 		float falsePositive = getFloatProperty("snd.sim.sensorFP");
 		float falseNegative = getFloatProperty("snd.sim.sensorFN");
@@ -217,9 +217,12 @@ public class Simulation {
 
 		// construct the app clients (TrafficGenerators) and connect them to Clients
 		InetAddress firstGeneratorAddress = incrementAddress(lastReceiverAddress);
-		firstGeneratorAddress = getIPAddressProperty("snd.sim.first_appclient_address", firstGeneratorAddress.toString().substring(1));
+		firstGeneratorAddress = getIPAddressProperty("snd.sim.first_appclient_address",
+				firstGeneratorAddress.toString().substring(1));
 		InetAddress lastGeneratorAddress = null;
 		InetAddress generatorAddress = firstGeneratorAddress;
+		appClients = new TrafficGenerator[clients.size()];
+		index = 0;
 		for (ClientProxy proxy : clients) {
 			TrafficGenerator generator = new TrafficGenerator(generatorAddress, this, eventingSystem);
 			SimVPNFactory factory = new SimVPNFactory(eventingSystem);
@@ -227,13 +230,52 @@ public class Simulation {
 			SimVPNImpl vpn = (SimVPNImpl) factory.createVPN(proxy.getAddress(), null);
 			generator.attachToProxy(vpn);
 			proxy.connectAppClient(generatorAddress);
-			appClients.add(generator);
+			appClients[index++] = generator;
 			generatorAddress = incrementAddress(generatorAddress);
 		}
 		lastGeneratorAddress = generatorAddress;
 
+		// Assign attackers and victims
+		int numberOfAttackers = getIntegerProperty("snd.sim.number_of_attackers");
+		if (numberOfAttackers > appClients.length) {
+			throw new IllegalArgumentException(
+					"There are more attackers (" + numberOfAttackers + ") than clients (" + appClients.length + ")");
+		}
+		if (true) {
+			List<TrafficGenerator> candidates = new ArrayList<>(appClients.length);
+			for (TrafficGenerator tg : appClients) {
+				candidates.add(tg);
+			}
+			for (int i = 0; i < numberOfAttackers; i++) {
+				TrafficGenerator attacker = candidates.remove(simRandom.nextInt(candidates.size()));
+				attacker.setAttacker();
+			}
+		}
+		
+		// Assign attackers and victims
+		int numberOfVictims = getIntegerProperty("snd.sim.number_of_victims", servers.size());
+		if (numberOfVictims > servers.size()) {
+			throw new IllegalArgumentException(
+					"There are more victims (" + numberOfVictims + ") than servers (" + servers.size() + ")");
+		}
+		if (true) {
+			List<TrafficReceiver> candidates = new ArrayList<>(servers.size());
+			for (TrafficReceiver tr : appServers) {
+				candidates.add(tr);
+			}
+			List<TrafficReceiver> ltr = new ArrayList<TrafficReceiver>();
+			for (int i = 0; i < numberOfVictims; i++) {
+				TrafficReceiver victim = candidates.remove(simRandom.nextInt(candidates.size()));
+				ltr.add(victim);
+			}
+			victims = (TrafficReceiver[])ltr.toArray(new TrafficReceiver[0]);
+		}
 		// construct the statistics-gathering module
 
+	}
+
+	private int getIntegerProperty(String propName, int defaultValue) {
+		return PropertyParser.getIntegerProperty(propName, defaultValue, properties);
 	}
 
 	/**
@@ -259,15 +301,14 @@ public class Simulation {
 	public float getFloatProperty(String propName) {
 		return PropertyParser.getFloatProperty(propName, properties);
 	}
-	
+
 	public String[] getListProperty(String propName) {
 		return PropertyParser.getListProperty(propName, properties);
 	}
-	
+
 	public String[] getListProperty(String propName, String defaultValue) {
 		return PropertyParser.getListProperty(propName, defaultValue, properties);
 	}
-	
 
 	private InetAddress getIPAddressProperty(String propName, String defaultValue) {
 		return PropertyParser.getIPAddressProperty(propName, defaultValue, properties);
@@ -276,7 +317,6 @@ public class Simulation {
 	private InetAddress getIPAddressProperty(String propName) {
 		return PropertyParser.getIPAddressProperty(propName, properties);
 	}
-
 
 	public float getProbabilityProperty(String propName) {
 		float prob = PropertyParser.getFloatProperty(propName, properties);
@@ -405,17 +445,20 @@ public class Simulation {
 
 	}
 
-	public MessageMetaData getNextMessageToSend(InetAddress sender) {
-		return new MessageMetaData(chooseServer(), isAttacking(sender));
+	public MessageMetaData getNextMessageToSend(TrafficGenerator sender) {
+		InetAddress destination = null;
+		boolean isAttack = false;
+		if (sender.isAttacker()) {
+			isAttack =  simRandom.nextFloat() < attackProb;
+		}
+		if (isAttack) {
+			destination = victims[simRandom.nextInt(victims.length)].getAddress();
+		} else {
+			destination = appServers[simRandom.nextInt(appServers.length)].getAddress();
+		}
+		return new MessageMetaData(destination, isAttack);
 	}
 
-	private boolean isAttacking(InetAddress sender) {
-		if (!attackProbs.containsKey(sender)) {
-			return false;
-		}
-		float attackProb = attackProbs.get(sender);
-		return simRandom.nextDouble() < attackProb;
-	}
 
 	public long getEndTime() {
 		return endTime;

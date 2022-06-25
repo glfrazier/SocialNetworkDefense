@@ -1,5 +1,6 @@
 package com.github.glfrazier.snd.protocol.message;
 
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.util.Arrays;
@@ -33,17 +34,17 @@ public class Message implements Serializable, Event {
 	public InetAddress getSrc() {
 		return src;
 	}
-	
+
 	public Serializable getContent() {
 		return content;
 	}
 
-
 	public String toString() {
 		return toString("Message");
 	}
-	
+
 	protected String toString(String t) {
-		return t + "(" + dst + "<==" + src + (content == null ? ")" : " '" + content.toString() + "')");
+		return t + "(" + addrToString(dst) + "<==" + addrToString(src)
+				+ (content == null ? ")" : " '" + content.toString() + "')");
 	}
 }

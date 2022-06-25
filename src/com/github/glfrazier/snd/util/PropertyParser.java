@@ -103,4 +103,11 @@ public class PropertyParser {
 		}
 		return addr;
 	}
+
+	public static int getIntegerProperty(String propName, int defaultValue, Properties properties) {
+		if (!properties.containsKey(propName)) {
+			properties.setProperty(propName, Integer.toString(defaultValue));
+		}
+		return getIntegerProperty(propName, properties);
+	}
 }

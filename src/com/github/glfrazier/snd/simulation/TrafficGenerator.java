@@ -1,5 +1,6 @@
 package com.github.glfrazier.snd.simulation;
 
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Random;
@@ -30,6 +31,8 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 	private Simulation sim;
 	private Statistics stats;
 	private long endTime;
+
+	private boolean isAttacker;
 
 	public TrafficGenerator(InetAddress addr, Simulation sim, EventingSystem es) {
 		address = addr;
@@ -85,7 +88,7 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 			return;
 		}
 		// choose a destination
-		Simulation.MessageMetaData mmd = sim.getNextMessageToSend(this.getAddress());
+		Simulation.MessageMetaData mmd = sim.getNextMessageToSend(this);
 
 		String content = null;
 		if (mmd.isAttack) {
@@ -116,12 +119,20 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 
 	@Override
 	public String toString() {
-		return "TrafficGenerator<" + address + ">";
+		return "TrafficGenerator<" + addrToString(address) + ">";
 	}
 
 	@Override
 	public void vpnClosed(VPN vpn) {
 		System.err.println(this + ": why did this happen?");
+	}
+
+	public boolean isAttacker() {
+		return isAttacker;
+	}
+
+	public void setAttacker() {
+		isAttacker = true;
 	}
 
 }
