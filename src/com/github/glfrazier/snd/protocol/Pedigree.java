@@ -1,5 +1,6 @@
 package com.github.glfrazier.snd.protocol;
 
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 import java.io.Serializable;
 import java.net.InetAddress;
 
@@ -42,7 +43,7 @@ public class Pedigree implements Serializable {
 
 	public String toString() {
 		if (stringValue == null) {
-			StringBuffer b = new StringBuffer(entity.toString());
+			StringBuffer b = new StringBuffer(addrToString(entity));
 			b.append('{');
 			for (int i = 0; i < requests.length; i++) {
 				if (i > 0) {

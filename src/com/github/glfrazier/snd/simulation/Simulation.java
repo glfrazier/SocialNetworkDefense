@@ -175,7 +175,7 @@ public class Simulation {
 			int index = 0;
 			for (int i = 0; i < numberOfClients; i++) {
 				SimImpl impl = new SimImpl(topology);
-				ClientProxy clientProxy = new ClientProxy(clientAddress, impl, eventingSystem, properties);
+				ClientProxy clientProxy = new ClientProxy(clientAddress, impl, eventingSystem, properties, stats);
 				impl.setNode(clientProxy);
 				clients.add(clientProxy);
 				InetAddress introAddr = topology.getAddressOfElement(index, 0);
@@ -331,12 +331,7 @@ public class Simulation {
 	}
 
 	public float getProbabilityProperty(String propName) {
-		float prob = PropertyParser.getFloatProperty(propName, properties);
-		if (prob < 0 || prob > 1) {
-			throw new IllegalArgumentException("Property <" + propName + "> (" + prob
-					+ ") is a probability; its value must be in the range [0..1].");
-		}
-		return prob;
+		return PropertyParser.getProbabilityProperty(propName, properties);
 	}
 
 	private static void addPropertiesIfNotAlreadyThere(Properties properties, Properties propertiesToAdd) {

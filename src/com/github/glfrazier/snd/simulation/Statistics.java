@@ -12,7 +12,9 @@ import java.util.Properties;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
-public class Statistics implements Serializable {
+import com.github.glfrazier.snd.util.DenialReporter;
+
+public class Statistics implements Serializable, DenialReporter {
 
 	private static final long serialVersionUID = 1L;
 
@@ -200,6 +202,7 @@ public class Statistics implements Serializable {
 		stats.responseToBadMessagesReceived++;
 	}
 	
+	@Override
 	public synchronized void deniedAtDepth(int depth) {
 		check();
 		switch(depth) {
@@ -227,5 +230,6 @@ public class Statistics implements Serializable {
 		stats.denials_7plus++;
 		}
 	}
+
 
 }

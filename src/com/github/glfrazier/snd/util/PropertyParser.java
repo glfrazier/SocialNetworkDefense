@@ -114,4 +114,14 @@ public class PropertyParser {
 		}
 		return getIntegerProperty(propName, properties);
 	}
+
+	public static float getProbabilityProperty(String propName, Properties properties) {
+		float prob = PropertyParser.getFloatProperty(propName, properties);
+		if (prob < 0 || prob > 1) {
+			throw new IllegalArgumentException("Property <" + propName + "> (" + prob
+					+ ") is a probability; its value must be in the range [0..1].");
+		}
+		return prob;
+	}
+
 }

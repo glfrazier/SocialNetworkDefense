@@ -1,6 +1,8 @@
 package com.github.glfrazier.snd.node;
 
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 import static java.lang.Math.max;
+import static java.util.logging.Level.FINEST;
 
 import java.net.InetAddress;
 import java.util.Collection;
@@ -17,7 +19,7 @@ import com.github.glfrazier.snd.protocol.Pedigree;
 public class ReputationModule {
 
 	private static final Logger LOGGER = Logger.getLogger(ReputationModule.class.getName());
-	
+
 	private static final long MINIMUM_FADE_INTERVAL = 10000; // 10 seconds
 	private static final long ONE_DAY = 24 * 60 * 60 * 1000; // milliseconds in a day
 	@SuppressWarnings("unused")
@@ -33,7 +35,7 @@ public class ReputationModule {
 	private static final float GOOD_FEEDBACK_INCREMENT_BASE = 0.1f;
 	private static final float MAX_REPUTATION = 1.0f;
 
-	private Map<InetAddress, User> userMap;
+	private Map<InetAddress, Entity> userMap;
 	private ThresholdController thresholdController;
 	private final EventingSystem eventingSystem;
 
@@ -64,21 +66,31 @@ public class ReputationModule {
 //		}
 //	}
 
-	public boolean reputationIsGreaterThanThreshold(Pedigree pedigree) {
-		User u = null;
+	public boolean reputationIsGreaterThanThreshold(Pedigree pedigree, boolean verbose) {
+		Entity u = null;
 		// Find the minimum reputation in the pedigree
 		float minRep = 0;
 		u = userMap.get(pedigree.getSubject());
 		if (u != null) {
 			minRep = u.getReputation();
+			if (LOGGER.isLoggable(FINEST)) {
+				LOGGER.finest(u + " has pre-existing reputation " + minRep);
+			}
+		} else {
+			if (LOGGER.isLoggable(FINEST)) {
+				LOGGER.finest(pedigree.getSubject() + " is an unknown entity.");
+			}
 		}
 		IntroductionRequest[] requests = pedigree.getRequestSequence();
-		for (int i = requests.length; i>0; i--) {
-			User intro = userMap.get(requests[i-1].introducer);
+		for (int i = requests.length; i > 0; i--) {
+			Entity intro = userMap.get(requests[i - 1].introducer);
 			if (intro != null) {
 				float rep = intro.getReputation();
 				if (rep < minRep) {
 					minRep = rep;
+					if (LOGGER.isLoggable(FINEST)) {
+						LOGGER.finest("\tintroducer " + intro + " has lowered the reputation. It is now: " + minRep);
+					}
 				}
 			}
 		}
@@ -86,26 +98,34 @@ public class ReputationModule {
 		// Compare the client's reputation to the threshold
 		float threshold = thresholdController.getThreshold();
 		boolean result = minRep > threshold;
+		if (LOGGER.isLoggable(FINEST)) {
+			LOGGER.finest(this + ": result for " + addrToString(pedigree.entity) + ": minRep=" + minRep + ", threshold="
+					+ threshold + ", result=" + result);
+		}
 
-		//System.out.println(this + ": minRep=" + minRep + ", threshold=" + threshold);
+		// System.out.println(this + ": minRep=" + minRep + ", threshold=" + threshold);
 		if (!result) {
+			LOGGER.finest("\t\tAnd we are not creating an entry!");
 			return result; // return without initializing any null User objects, if we are not accepting
 							// the introduction.
 		}
 
 		// Assign a reputation to every member of the pedigree that does not
 		// already have a reputation. Note that we are accepting this connection.
-		for (int i = requests.length; i>0; i--) {
-			User intro = userMap.get(requests[i-1].introducer);
+		for (int i = requests.length; i > 0; i--) {
+			Entity intro = userMap.get(requests[i - 1].introducer);
 			if (intro == null) {
 				minRep = max(minRep - EPSILON, threshold + EPSILON);
-				intro = new User(requests[i-1].introducer, minRep);
-				userMap.put(requests[i-1].introducer, intro);
+				intro = new Entity(requests[i - 1].introducer, minRep);
+				userMap.put(requests[i - 1].introducer, intro);
+				if (LOGGER.isLoggable(FINEST)) {
+					LOGGER.finest(this + ": initializing " + requests[i - 1].introducer + " to " + minRep);
+				}
 			}
 		}
 		if (u == null) {
 			minRep = max(minRep - EPSILON, threshold + EPSILON);
-			u = new User(pedigree.getSubject(), minRep);
+			u = new Entity(pedigree.getSubject(), minRep);
 			userMap.put(pedigree.getSubject(), u);
 		}
 
@@ -143,7 +163,7 @@ public class ReputationModule {
 	}
 
 	private void adjustReputation(InetAddress e, float dRep) {
-		User entity = userMap.get(e);
+		Entity entity = userMap.get(e);
 		if (entity == null) {
 			LOGGER.warning("Asked to adjust the reputation of entity " + e
 					+ ", but the ReputationModule has no record of that entity.");
@@ -152,11 +172,11 @@ public class ReputationModule {
 		entity.adjustReputation(dRep);
 	}
 
-	public synchronized Collection<User> getUsers() {
+	public synchronized Collection<Entity> getUsers() {
 		return userMap.values();
 	}
 
-	class User implements Comparable<User> {
+	class Entity implements Comparable<Entity> {
 
 		InetAddress identity;
 		long timeCreated;
@@ -164,12 +184,12 @@ public class ReputationModule {
 		long timeLastFaded;
 		float reputation;
 
-		public User(InetAddress id, float initialReputation) {
+		public Entity(InetAddress id, float initialReputation) {
 			this(id);
 			reputation = initialReputation;
 		}
 
-		private User(InetAddress id) {
+		private Entity(InetAddress id) {
 			identity = id;
 			timeCreated = eventingSystem.getCurrentTime();
 		}
@@ -207,13 +227,18 @@ public class ReputationModule {
 
 		@Override
 		public boolean equals(Object o) {
-			User ou = (User) o;
+			Entity ou = (Entity) o;
 			return identity.equals(ou.identity);
 		}
 
 		@Override
-		public int compareTo(User o) {
+		public int compareTo(Entity o) {
 			return Float.compare(reputation, o.reputation);
+		}
+		
+		@Override
+		public String toString() {
+			return "Entity " + addrToString(identity);
 		}
 	}
 
@@ -225,11 +250,11 @@ public class ReputationModule {
 		if (userMap.isEmpty()) {
 			return EPSILON;
 		}
-		TreeSet<User> sorted = new TreeSet<>();
+		TreeSet<Entity> sorted = new TreeSet<>();
 		sorted.addAll(userMap.values());
 		return sorted.iterator().next().getReputation();
 	}
-	
+
 	@Override
 	public String toString() {
 		return "RepModule for " + owner;

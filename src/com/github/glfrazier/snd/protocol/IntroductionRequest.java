@@ -1,5 +1,7 @@
 package com.github.glfrazier.snd.protocol;
 
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
+
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.util.concurrent.atomic.AtomicLong;
@@ -11,10 +13,10 @@ public class IntroductionRequest implements Serializable {
 	private static final long serialVersionUID = 1L;
 
 	private static final AtomicLong NONCE_GENERATOR = new AtomicLong(0);
-	
+
 	public static final IntroductionRequest SAMPLE_INTRODUCTION_REQUEST = new IntroductionRequest(
 			AddressUtils.ZERO_IPv4_ADDRESS, AddressUtils.ZERO_IPv4_ADDRESS, AddressUtils.ZERO_IPv4_ADDRESS);
-	
+
 	public final InetAddress requester;
 	public final InetAddress introducer;
 	public final InetAddress destination;
@@ -37,13 +39,14 @@ public class IntroductionRequest implements Serializable {
 			return false;
 		}
 		IntroductionRequest ir = (IntroductionRequest) o;
-		return requester.equals(ir.requester) && introducer.equals(ir.introducer)
-				&& destination.equals(ir.destination) && nonce == ir.nonce;
+		return requester.equals(ir.requester) && introducer.equals(ir.introducer) && destination.equals(ir.destination)
+				&& nonce == ir.nonce;
 	}
 
 	public String toString() {
 		if (stringValue == null) {
-			stringValue = "IntroductionRequest(" + requester + ", " + introducer + ", " + destination + ", " + nonce + ")";
+			stringValue = "IntroductionRequest(" + addrToString(requester) + ", " + addrToString(introducer) + ", "
+					+ addrToString(destination) + ", " + nonce + ")";
 		}
 		return stringValue;
 	}

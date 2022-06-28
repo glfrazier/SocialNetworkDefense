@@ -8,25 +8,25 @@ snd.sim.first_client_address=01::0
 snd.sim.first_server_address=02::0
 #
 snd.sim.topology=butterfly
-snd.sim.number_of_introducer_rows: 2
-snd.sim.number_of_introducer_cols: 2
+snd.sim.number_of_introducer_rows: 4
+snd.sim.number_of_introducer_cols: 3
 snd.sim.introducer_fanout: 2
 
 #
 # Servers and clients
 #
-snd.sim.number_of_servers: 4
+snd.sim.number_of_servers: 20
 snd.sim.client_traffic_exponential: 0.001
-snd.sim.number_of_clients: 10
+snd.sim.number_of_clients: 1000
 #
 # Note that the number of attackers must be lte the number
 # of clients, because the attackers are clients.
 #
-snd.sim.number_of_attackers: 4
+snd.sim.number_of_attackers: 40
 #
 # same with number of victims and number of servers.
 #
-snd.sim.number_of_victims: 2
+snd.sim.number_of_victims: 8
 #
 snd.sim.attack_probability: 0.01
 
@@ -45,7 +45,7 @@ snd.sim.end_time: 2000000
 # Configure the threshold controller
 #
 snd.thold_ctlr.sensor_smoothing_alpha: 0.1
-snd.thold_ctlr.target_health: 0.999
+snd.thold_ctler.target_health: 0.999
 snd.thold_ctlr.K: 30.0
 snd.thold_ctlr.tau_i: 60.0
 snd.thold_ctlr.tau_t: 0.05

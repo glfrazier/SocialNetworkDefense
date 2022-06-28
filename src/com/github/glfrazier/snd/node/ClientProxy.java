@@ -16,6 +16,7 @@ import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.SNDMessage;
 import com.github.glfrazier.snd.protocol.message.WrappedMessage;
+import com.github.glfrazier.snd.util.DenialReporter;
 import com.github.glfrazier.snd.util.Implementation;
 
 public class ClientProxy extends SNDNode // implements StateMachineTracker
@@ -23,9 +24,11 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 	private InetAddress proxiedAppClient;
 	private InetAddress initialIntroducer;
 	private Map<IntroductionRequest, RequestProtocol> introductionSequences = new HashMap<>();
+	private DenialReporter denialReporter;
 
-	public ClientProxy(InetAddress addr, Implementation impl, EventingSystem es, Properties props) {
+	public ClientProxy(InetAddress addr, Implementation impl, EventingSystem es, Properties props, DenialReporter denialReporter) {
 		super(addr, impl, es, props);
+		this.denialReporter = denialReporter;
 	}
 
 	public synchronized void connectAppClient(InetAddress app) throws IOException {
@@ -118,7 +121,7 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 			}
 		} else if (m.getSrc().equals(proxiedAppClient)) {
 			// The message came from the client that this node is proxying for
-			ClientConnectToServerProtocol proto = new ClientConnectToServerProtocol(this, m, this.verbose);
+			ClientConnectToServerProtocol proto = new ClientConnectToServerProtocol(this, m, denialReporter, this.verbose);
 			// No need to register a callback, as the protocol handles sending the message.
 			// proto.registerCallback(this);
 			proto.begin();

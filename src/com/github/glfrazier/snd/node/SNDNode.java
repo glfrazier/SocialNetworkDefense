@@ -94,7 +94,8 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 		this.eventingSystem = eventingSystem;
 		this.reputationModule = new ReputationModule(eventingSystem, this);
 		this.implementation = implementation;
-		this.verbose = getBooleanProperty("snd.node.verbose", "false");
+		this.verbose = getBooleanProperty("snd.node.verbose", "false")
+				|| getBooleanProperty("snd.sim." + addrToString(address) + ".verbose", "false");
 		eventingSystem.scheduleEventRelative(this, NODE_MAINTENANCE_EVENT,
 				MAINTENANCE_INTERVAL + Math.abs(address.hashCode() % 100));
 	}
@@ -121,6 +122,11 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 	public int getIntegerProperty(String propName) {
 		return PropertyParser.getIntegerProperty(propName, properties);
 	}
+
+	public double getProbabilityProperty(String propName) {
+		return PropertyParser.getProbabilityProperty(propName, properties);
+	}
+
 
 	public synchronized Pedigree getPedigree(InetAddress client) {
 		Pedigree p = pedigrees.get(client);
@@ -303,7 +309,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 		p = p.getNext(m.getIntroductionRequest());
 		// System.out.println("\tpedigree is now " + p);
 		addPedigree(p);
-		if (reputationModule.reputationIsGreaterThanThreshold(p)) {
+		if (reputationModule.reputationIsGreaterThanThreshold(p, verbose)) {
 			// If the client's reputation is above threshold, create a transaction-specific
 			// VPN to the client and send an Introduction Accepted message.
 			try {
@@ -339,6 +345,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 				pendingFeedbacksToReceive.put(msg.getIntroductionRequest(),
 						new TimeAndIntroductionRequest(eventingSystem.getCurrentTime(), previousIntroduction));
 			} else if (msg instanceof IntroductionRefusedMessage) {
+				System.out.println(this + " sending denied because of " + msg);
 				implementation.getComms().send(new IntroductionDeniedMessage(msg.getIntroductionRequest()));
 			} else {
 				System.err.println(
@@ -363,39 +370,37 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 			LOGGER.severe(
 					this + ": Invariant Violation. Received introduction request, but ir.requester != m.getSrc().\n"
 							+ "\tir=" + ir + ", m=" + m);
-		} else {
-			Pedigree p = getPedigree(ir.requester);
-			// System.out.println(this + " received " + ir + ", pedigree=" + p);
-			if (reputationModule.reputationIsGreaterThanThreshold(p)) {
-				DiscoveryService.Query query = implementation.getDiscoveryService().createQuery(m.getServerAddress());
-				// TODO Create a state machine for handling introduction requests, and add the
-				// query to that state machine.
-				InetAddress nextHop = implementation.getDiscoveryService().getNextHopTo(query);
-				IntroductionOfferMessage offer = //
-						new IntroductionOfferMessage(m.getIntroductionRequest(), nextHop, getPedigree(m.getSrc()));
+			return;
+		}
+		Pedigree p = getPedigree(ir.requester);
+		// System.out.println(this + " received " + ir + ", pedigree=" + p);
+		if (reputationModule.reputationIsGreaterThanThreshold(p, verbose)) {
+			DiscoveryService.Query query = implementation.getDiscoveryService().createQuery(m.getServerAddress());
+			// TODO Create a state machine for handling introduction requests, and add the
+			// query to that state machine.
+			InetAddress nextHop = implementation.getDiscoveryService().getNextHopTo(query);
+			IntroductionOfferMessage offer = //
+					new IntroductionOfferMessage(m.getIntroductionRequest(), nextHop, getPedigree(m.getSrc()));
+			try {
+				implementation.getComms().send(offer);
+			} catch (IOException e) {
+				System.out.println(this + " denying introduction request " + ir + " because unable to send offer to target " + nextHop);
+				LOGGER.severe("Failed to send offer to " + nextHop + ": " + e);
 				try {
-					implementation.getComms().send(offer);
-				} catch (IOException e) {
-					try {
-						implementation.getComms().send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
-					} catch (IOException e1) {
-						// ignore the failure.
-					}
+					implementation.getComms().send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
+					implementation.getComms().closeIntroducedVPN(m.getIntroductionRequest().requester);
+				} catch (IOException e1) {
+					// ignore the failure.
 				}
-				return;
 			}
+			return;
 		}
 		// else
 		try {
+			System.out.println(this + " denying introduction request " + ir + " because of too low of a reputation.");
 			implementation.getComms().send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
 		} catch (IOException e) {
 			// ignore the failure
-		}
-		try {
-			implementation.getComms().closeIntroducedVPN(m.getIntroductionRequest().requester);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
 		}
 	}
 

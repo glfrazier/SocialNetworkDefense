@@ -1,12 +1,14 @@
 package com.github.glfrazier.snd.protocol;
 
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
+
 import java.io.IOException;
 import java.net.InetAddress;
 
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.snd.node.ClientProxy;
 import com.github.glfrazier.snd.protocol.message.Message;
-import com.github.glfrazier.snd.util.VPN;
+import com.github.glfrazier.snd.util.DenialReporter;
 import com.github.glfrazier.statemachine.EventImpl;
 import com.github.glfrazier.statemachine.State;
 import com.github.glfrazier.statemachine.StateMachine;
@@ -32,15 +34,21 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 	private Message message;
 	private ClientProxy requester;
 	private InetAddress introducer;
+	
+	private DenialReporter denialReporter;
 
 	private State unconnectedState;
 	private State connectedState;
 	private State failureState;
+	
+	private int depth = 0;
 
-	public ClientConnectToServerProtocol(ClientProxy client, Message m, boolean verbose) {
-		super("Introduction Sequence: " + m.getSrc() + " ==> " + m.getDst(), EventEqualityMode.EQUALS);
+	public ClientConnectToServerProtocol(ClientProxy client, Message m, DenialReporter denialReporter, boolean verbose) {
+		super("Introduction Sequence: " + addrToString(m.getSrc()) + " ==> " + addrToString(m.getDst()),
+				EventEqualityMode.EQUALS);
 		this.message = m;
 		this.requester = client;
+		this.denialReporter = denialReporter;
 		this.verbose = verbose;
 		unconnectedState = new State("Unconnected", createIntroductionAction(this));
 		addTransition(new Transition(unconnectedState, NEXT_STEP, unconnectedState));
@@ -62,7 +70,6 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 
 	private State.Action createIntroductionAction(ClientConnectToServerProtocol clientToServerProtocol) {
 		return new State.Action() {
-
 
 			public void act(State state, Event e) {
 				IntroductionRequest request = new IntroductionRequest(requester.getAddress(), introducer,
@@ -96,10 +103,12 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 				this.receive(CONNECTED);
 			} else {
 				introducer = newNeighbor;
+				depth++;
 				this.receive(NEXT_STEP);
 			}
 			return;
-		} else if (rp.routeIsAvailable()) {
+		} // else
+		if (rp.routeIsAvailable()) {
 			requester.getImplementation().getComms().addRoute(message.getDst(), rp.getIntroductionRequest().introducer);
 			try {
 				requester.getImplementation().getComms().send(message);
@@ -110,6 +119,11 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 			this.receive(CONNECTED);
 			return;
 		}
+		// else
+		denialReporter.deniedAtDepth(depth);
+		this.receive(FAILURE);
+		return;
+
 	}
 
 	public boolean isConnected() {

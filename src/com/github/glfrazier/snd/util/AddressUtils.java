@@ -30,9 +30,9 @@ public class AddressUtils {
 			for (int i = 1; i < start; i++) {
 				newResult.append(':').append(tokens[i]);
 			}
-			newResult.append(':');
+			newResult.append('.');
 			for (int i = end; i < tokens.length; i++) {
-				newResult.append(':').append(tokens[i]);
+				newResult.append('.').append(tokens[i]);
 			}
 			StringBuffer x = new StringBuffer("/").append(newResult);
 			result = x.toString();
