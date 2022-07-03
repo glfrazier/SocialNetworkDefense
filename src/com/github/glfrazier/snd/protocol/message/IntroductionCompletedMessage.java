@@ -1,6 +1,8 @@
 package com.github.glfrazier.snd.protocol.message;
 
 import static com.github.glfrazier.snd.protocol.IntroductionRequest.SAMPLE_INTRODUCTION_REQUEST;
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
+
 import java.io.Serializable;
 import java.net.InetAddress;
 
@@ -26,6 +28,10 @@ public class IntroductionCompletedMessage extends SNDMessage implements Serializ
 
 	public Object getKeyingMaterial() {
 		return null;
+	}
+
+	public String toString() {
+		return super.toString() + "(connected to " + addrToString(nextStep) + ")";
 	}
 
 }

@@ -78,7 +78,7 @@ public class Statistics implements Serializable, DenialReporter {
 				if (name.startsWith("this")) {
 					continue;
 				}
-				System.out.println("field name=" + name);
+				// System.out.println("field name=" + name);
 				results.put(name, field.getLong(stats));
 			}
 		} catch (IllegalArgumentException | IllegalAccessException | SecurityException e) {

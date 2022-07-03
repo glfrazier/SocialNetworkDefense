@@ -16,7 +16,7 @@ snd.sim.introducer_fanout: 2
 # Servers and clients
 #
 snd.sim.number_of_servers: 20
-snd.sim.client_traffic_exponential: 0.001
+snd.sim.client_traffic_exponential: 0.01
 snd.sim.number_of_clients: 1000
 #
 # Note that the number of attackers must be lte the number
@@ -38,6 +38,7 @@ snd.sim.sensorFN: 0.0
 
 #
 # Runtime
+#
 snd.number_of_threads: 1
 snd.sim.end_time: 2000000
 

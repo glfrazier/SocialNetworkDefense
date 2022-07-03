@@ -2,6 +2,7 @@ package com.github.glfrazier.snd.util;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.logging.Level;
 
 public class AddressUtils {
 
@@ -98,8 +99,26 @@ public class AddressUtils {
 		return 0;
 	}
 
-	public static void main(String[] args) throws Exception {
-		byte[] b1 = { 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1 };
-		System.out.println(InetAddress.getByAddress(b1) + " ==> " + addrToString(InetAddress.getByAddress(b1)));
+	public static class AddressPair {
+		public final InetAddress dst;
+		public final InetAddress src;
+
+		public AddressPair(InetAddress dst, InetAddress src) {
+			this.dst = dst;
+			this.src = src;
+		}
+
+		public int hashCode() {
+			return dst.hashCode() ^ src.hashCode();
+		}
+
+		public boolean equals(Object o) {
+			if (!(o instanceof AddressPair)) {
+				return false;
+			}
+			AddressPair ap = (AddressPair) o;
+			return dst.equals(ap.dst) && src.equals(ap.src);
+		}
 	}
+
 }

@@ -1,6 +1,7 @@
 package com.github.glfrazier.snd.node;
 
 import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
+import static java.util.logging.Level.FINE;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -83,6 +84,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 	protected static final long FEEDBACK_EXPIRATION_TIME = 8 * 60 * 60 * 1000; // eight hours (why?)
 	private static final long MAINTENANCE_INTERVAL = FEEDBACK_EXPIRATION_TIME / 100;
 	protected static final Logger LOGGER = Logger.getLogger(SNDNode.class.getName());
+	protected Logger logger;
 
 	public SNDNode(InetAddress addr, Implementation implementation, EventingSystem eventingSystem,
 			Properties properties) {
@@ -94,8 +96,18 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 		this.eventingSystem = eventingSystem;
 		this.reputationModule = new ReputationModule(eventingSystem, this);
 		this.implementation = implementation;
-		this.verbose = getBooleanProperty("snd.node.verbose", "false")
-				|| getBooleanProperty("snd.sim." + addrToString(address) + ".verbose", "false");
+		this.verbose = getBooleanProperty("snd.node.verbose", "false");
+		if (properties.containsKey("snd.sim." + addrToString(address) + ".verbose")) {
+			this.verbose = this.verbose || getBooleanProperty("snd.sim." + addrToString(address) + ".verbose", "false");
+		}
+		logger = Logger.getLogger("node" + addrToString(this.address));
+		if (logger.getLevel() == null) {
+			logger = LOGGER;
+		} else if (LOGGER.getLevel() != null) {
+			if (LOGGER.getLevel().intValue() < logger.getLevel().intValue()) {
+				logger = LOGGER;
+			}
+		}
 		eventingSystem.scheduleEventRelative(this, NODE_MAINTENANCE_EVENT,
 				MAINTENANCE_INTERVAL + Math.abs(address.hashCode() % 100));
 	}
@@ -127,11 +139,10 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 		return PropertyParser.getProbabilityProperty(propName, properties);
 	}
 
-
 	public synchronized Pedigree getPedigree(InetAddress client) {
 		Pedigree p = pedigrees.get(client);
 		if (p == null) {
-			if (!implementation.getComms().isNonIntroducedNeighbor(client)) {
+			if (implementation.getComms().isIntroducedNeighbor(client)) {
 				throw new IllegalArgumentException(this + " does not have a pedigree for neighbor " + client);
 			}
 			p = new Pedigree(client);
@@ -241,16 +252,18 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 	}
 
 	protected void processFeedback(FeedbackMessage m) {
-		System.out.println(this + " received " + m);
+		if (logger.isLoggable(FINE)) {
+			logger.fine(this + " received " + m);
+		}
 		IntroductionRequest introductionRequest = m.getIntroductionRequest();
 		if (!pendingFeedbacksToReceive.containsKey(introductionRequest)) {
-			LOGGER.severe(this + ": Received feedback for a transaction that is not pending feedback. m=" + m);
+			logger.severe(this + ": Received feedback for a transaction that is not pending feedback. m=" + m);
 			return;
 		}
 		Pedigree pedigree = getPedigree(introductionRequest.requester);
 		if (pedigree == null) {
 			// TODO should we manufacture an introducer-less pedigree?
-			LOGGER.warning(this + ": Received feedback for a client we no longer know. m=" + m);
+			logger.warning(this + ": Received feedback for a client we no longer know. m=" + m);
 			return;
 		}
 		reputationModule.applyFeedback(pedigree, m.getFeedback());
@@ -273,7 +286,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 				// System.out.println(this + " sending (fwding) " + fm);
 				implementation.getComms().send(fm);
 			} catch (IOException e) {
-				LOGGER.severe(this + ": Failed transmission: " + e);
+				logger.severe(this + ": Failed transmission: " + e);
 				new Exception(this + ": Failed transmission: " + e).printStackTrace();
 				System.exit(-1);
 			}
@@ -284,13 +297,13 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 						.printStackTrace();
 				System.exit(-1);
 			}
-			if (implementation.getComms().isNonIntroducedNeighbor(introductionRequest.requester)) {
+			if (!implementation.getComms().isIntroducedNeighbor(introductionRequest.requester)) {
 				// We are connected to the requester -- forward the feedback to them!
 				try {
 					implementation.getComms().send(new FeedbackMessage(introductionRequest.requester, getAddress(),
 							m.getSubject(), m.getFeedback()));
 				} catch (IOException e) {
-					LOGGER.severe(this + ": Failed transmission: " + e);
+					logger.severe(this + ": Failed transmission: " + e);
 					new Exception(this + ": Failed transmission: " + e).printStackTrace();
 					System.exit(-1);
 				}
@@ -321,14 +334,14 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 				// node to send the feedback to
 				pendingFeedbacksToSend.put(m.getIntroductionRequest(), eventingSystem.getCurrentTime());
 			} catch (IOException e) {
-				LOGGER.severe("Failed to send message: " + e);
+				logger.severe("Failed to send message: " + e);
 			}
 		} else {
 			try {
 				implementation.getComms()
 						.send(new IntroductionRefusedMessage(m.getIntroductionRequest(), getAddress()));
 			} catch (IOException e) {
-				LOGGER.severe("Failed to send message: " + e);
+				logger.severe("Failed to send message: " + e);
 			}
 		}
 
@@ -356,18 +369,19 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		try {
-			implementation.getComms().closeIntroducedVPN(msg.getIntroductionRequest().requester);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		// Closing the connection is now being handled in the VPN
+//		try {
+//			implementation.getComms().closeIntroducedVPN(msg.getIntroductionRequest().requester);
+//		} catch (IOException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
 	}
 
 	protected void processIntroductionRequest(IntroductionRequestMessage m) {
 		IntroductionRequest ir = m.getIntroductionRequest();
 		if (!ir.requester.equals(m.getSrc())) {
-			LOGGER.severe(
+			logger.severe(
 					this + ": Invariant Violation. Received introduction request, but ir.requester != m.getSrc().\n"
 							+ "\tir=" + ir + ", m=" + m);
 			return;
@@ -384,11 +398,13 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 			try {
 				implementation.getComms().send(offer);
 			} catch (IOException e) {
-				System.out.println(this + " denying introduction request " + ir + " because unable to send offer to target " + nextHop);
-				LOGGER.severe("Failed to send offer to " + nextHop + ": " + e);
+				System.out.println(this + " denying introduction request " + ir
+						+ " because unable to send offer to target " + nextHop);
+				logger.severe("Failed to send offer to " + nextHop + ": " + e);
 				try {
 					implementation.getComms().send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
-					implementation.getComms().closeIntroducedVPN(m.getIntroductionRequest().requester);
+					// Closing the connection is now being handled in send!
+					// implementation.getComms().closeIntroducedVPN(m.getIntroductionRequest().requester);
 				} catch (IOException e1) {
 					// ignore the failure.
 				}
@@ -415,11 +431,6 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 
 	public Implementation getImplementation() {
 		return implementation;
-	}
-
-	@Override
-	public void vpnClosed(VPN vpn) {
-		implementation.getComms().vpnClosed(vpn);
 	}
 
 	@Override
@@ -455,6 +466,16 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 			t.start();
 			eventingSystem.scheduleEventRelative(this, e, MAINTENANCE_INTERVAL);
 		}
+	}
+
+	@Override
+	public Logger getLogger() {
+		return logger;
+	}
+
+	@Override
+	public void vpnClosed(VPN vpn) {
+		// System.out.println(this + ": " + vpn + " is closed.");
 	}
 
 }

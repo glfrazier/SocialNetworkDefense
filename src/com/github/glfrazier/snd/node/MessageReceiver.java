@@ -1,6 +1,7 @@
 package com.github.glfrazier.snd.node;
 
 import java.net.InetAddress;
+import java.util.logging.Logger;
 
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.VPN;
@@ -26,10 +27,17 @@ public interface MessageReceiver {
 	 * @return the address
 	 */
 	public InetAddress getAddress();
-	
+
 	/**
 	 * Notify the message receiver that a VPN has been closed.
 	 */
 	public void vpnClosed(VPN vpn);
-	
+
+	/**
+	 * Used by (e.g.,) {@link VPN} implementations to log activity via their owning entity's logger.
+	 * 
+	 * @return
+	 */
+	public Logger getLogger();
+
 }

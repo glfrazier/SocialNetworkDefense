@@ -4,6 +4,7 @@ import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Random;
+import java.util.logging.Logger;
 
 import com.github.glfrazier.snd.node.Feedback;
 import com.github.glfrazier.snd.node.MessageReceiver;
@@ -13,6 +14,8 @@ import com.github.glfrazier.snd.util.VPN;
 
 public class TrafficReceiver implements MessageReceiver {
 
+	protected static final Logger LOGGER = Logger.getLogger(TrafficReceiver.class.getName());
+	
 	public static final String RESPONSE_TO_BAD_MESSAGE = "This is a response to an attack message.";
 	public static final String RESPONSE_TO_GOOD_MESSAGE = "This is a response to a benign message.";
 	private float falsePositiveRate;
@@ -83,5 +86,10 @@ public class TrafficReceiver implements MessageReceiver {
 	@Override
 	public void vpnClosed(VPN vpn) {
 		System.err.println(this + ": why did this happen?");
+	}
+
+	@Override
+	public Logger getLogger() {
+		return LOGGER;
 	}
 }

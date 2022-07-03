@@ -4,6 +4,7 @@ import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -16,6 +17,8 @@ import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.SNDMessage;
 import com.github.glfrazier.snd.protocol.message.WrappedMessage;
+import com.github.glfrazier.snd.util.AddressUtils;
+import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 import com.github.glfrazier.snd.util.DenialReporter;
 import com.github.glfrazier.snd.util.Implementation;
 
@@ -25,8 +28,11 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 	private InetAddress initialIntroducer;
 	private Map<IntroductionRequest, RequestProtocol> introductionSequences = new HashMap<>();
 	private DenialReporter denialReporter;
+	private Map<AddressPair, IntroductionRequest> destinationIntroductionMap = Collections
+			.synchronizedMap(new HashMap<>());
 
-	public ClientProxy(InetAddress addr, Implementation impl, EventingSystem es, Properties props, DenialReporter denialReporter) {
+	public ClientProxy(InetAddress addr, Implementation impl, EventingSystem es, Properties props,
+			DenialReporter denialReporter) {
 		super(addr, impl, es, props);
 		this.denialReporter = denialReporter;
 	}
@@ -105,7 +111,8 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 				// VPN. And we certainly should not do so simply because we sent a Message
 				// (packet?) to the application client.
 				try {
-					implementation.getComms().closeIntroducedVPN(m.getSrc());
+					IntroductionRequest ir = destinationIntroductionMap.get(new AddressUtils.AddressPair(enc.getSrc(), enc.getDst()));
+					implementation.getComms().closeIntroducedVPN(m.getSrc(), ir);
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -121,7 +128,8 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 			}
 		} else if (m.getSrc().equals(proxiedAppClient)) {
 			// The message came from the client that this node is proxying for
-			ClientConnectToServerProtocol proto = new ClientConnectToServerProtocol(this, m, denialReporter, this.verbose);
+			ClientConnectToServerProtocol proto = new ClientConnectToServerProtocol(this, m, denialReporter,
+					this.verbose);
 			// No need to register a callback, as the protocol handles sending the message.
 			// proto.registerCallback(this);
 			proto.begin();
@@ -160,6 +168,10 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 
 	public void registerProtocol(RequestProtocol intro) {
 		introductionSequences.put(intro.getIntroductionRequest(), intro);
+	}
+
+	public void addIntroductionToDestionation(InetAddress dst, InetAddress src, IntroductionRequest introductionRequest) {
+		destinationIntroductionMap.put(new AddressPair(dst, src), introductionRequest);
 	}
 
 }

@@ -34,16 +34,19 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 	private Message message;
 	private ClientProxy requester;
 	private InetAddress introducer;
-	
+
+	private IntroductionRequest priorIntroduction;
+
 	private DenialReporter denialReporter;
 
 	private State unconnectedState;
 	private State connectedState;
 	private State failureState;
-	
+
 	private int depth = 0;
 
-	public ClientConnectToServerProtocol(ClientProxy client, Message m, DenialReporter denialReporter, boolean verbose) {
+	public ClientConnectToServerProtocol(ClientProxy client, Message m, DenialReporter denialReporter,
+			boolean verbose) {
 		super("Introduction Sequence: " + addrToString(m.getSrc()) + " ==> " + addrToString(m.getDst()),
 				EventEqualityMode.EQUALS);
 		this.message = m;
@@ -88,7 +91,9 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 		if (rp.introductionSucceeded()) {
 			InetAddress newNeighbor = rp.getResultingNeighbor();
 			try {
-				requester.getImplementation().getComms().closeIntroducedVPN(rp.getIntroductionRequest().introducer);
+				if (priorIntroduction != null) {
+					requester.getImplementation().getComms().closeIntroducedVPN(rp.getIntroducer(), priorIntroduction);
+				}
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -100,9 +105,12 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
+				requester.addIntroductionToDestionation(message.getDst(), message.getSrc(),
+						rp.getIntroductionRequest());
 				this.receive(CONNECTED);
 			} else {
 				introducer = newNeighbor;
+				priorIntroduction = rp.getIntroductionRequest();
 				depth++;
 				this.receive(NEXT_STEP);
 			}
@@ -116,6 +124,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
+			requester.addIntroductionToDestionation(message.getDst(), message.getSrc(), rp.getIntroductionRequest());
 			this.receive(CONNECTED);
 			return;
 		}

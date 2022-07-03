@@ -29,6 +29,15 @@ public interface Comms {
 
 	/**
 	 * Send a message.
+	 * <p>
+	 * <emph>Implementation Node</emph><br>
+	 * Send is expected to detect when an IntroductionRequestMessage is being sent
+	 * and when an IntroductionCompletedMessage or IntroductionDeniedMessage is
+	 * received. It will work with the VPN implementation to ensure that introduced
+	 * VPNs are not closed while they are being used by an introduction protocol.
+	 * See {@link com.github.glfrazier.snd.simulation.SimComms#send(Message)} and
+	 * {@link com.github.glfrazier.snd.simulation.SimVPNImpl#receive(Message)} for
+	 * an example.
 	 * 
 	 * @param msg The message to send.
 	 * @throws IOException If the transmission fails (e.g., there is no route to the
@@ -56,10 +65,11 @@ public interface Comms {
 	 * method has no effect.
 	 * 
 	 * @param nbr
+	 * @param ir
 	 * @return
 	 * @throws IOException
 	 */
-	public boolean closeIntroducedVPN(InetAddress nbr) throws IOException;
+	public boolean closeIntroducedVPN(InetAddress nbr, IntroductionRequest ir) throws IOException;
 
 	/**
 	 * @param dst
@@ -78,11 +88,11 @@ public interface Comms {
 	 * 
 	 * @param vpn
 	 */
-	public void vpnClosed(VPN vpn);
+	//public void vpnClosed(VPN vpn);
 
 	/**
-	 * Obtain one of the IntroductionRequests that resulted in there being a VPN to the
-	 * specified neighbor.
+	 * Obtain one of the IntroductionRequests that resulted in there being a VPN to
+	 * the specified neighbor.
 	 * 
 	 * @param nbr         The node to which this node has a VPN
 	 * @param requester   The requester for the desired IntroductionRequest
@@ -100,7 +110,6 @@ public interface Comms {
 	 * @param node
 	 * @return
 	 */
-	public boolean isNonIntroducedNeighbor(InetAddress node);
-
+	public boolean isIntroducedNeighbor(InetAddress node);
 
 }

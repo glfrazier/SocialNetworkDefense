@@ -23,6 +23,16 @@ public class IntroductionRequest implements Serializable {
 	private final long nonce;
 	private transient String stringValue;
 
+	/**
+	 * Construct an introduction request using the addresses of the requester (the
+	 * node making the request), the introducer (the requester is asking the
+	 * introducer for the introduction) and the target (the node to which the
+	 * requester wishes to be connected).
+	 * 
+	 * @param requester the requesting node
+	 * @param introducer the node of whom the introduction is being requested
+	 * @param destination the node to which the requester wishes to be connected
+	 */
 	public IntroductionRequest(InetAddress requester, InetAddress introducer, InetAddress destination) {
 		this.requester = requester;
 		this.introducer = introducer;

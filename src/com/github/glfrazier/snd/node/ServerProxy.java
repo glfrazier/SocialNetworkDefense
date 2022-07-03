@@ -92,7 +92,7 @@ public class ServerProxy extends SNDNode {
 			WrappedMessage wrapper = (WrappedMessage) m;
 			Message enclosed = wrapper.getEnclosedMessage();
 			if (!enclosed.getDst().equals(proxiedAppServer)) {
-				LOGGER.severe(this + ": Why did we receive " + m + "?");
+				logger.severe(this + ": Why did we receive " + m + "?");
 				return;
 			}
 			implementation.getComms().addRoute(enclosed.getSrc(), wrapper.getSrc());
@@ -106,7 +106,7 @@ public class ServerProxy extends SNDNode {
 						new TimeAndIntroductionRequest(eventingSystem.getCurrentTime(), ir));
 			} catch (IOException e) {
 				e.printStackTrace();
-				LOGGER.severe(
+				logger.severe(
 						this + ": How could we have received a wrapped message but not have a link to the wrapper? msg="
 								+ m);
 			}
@@ -153,7 +153,7 @@ public class ServerProxy extends SNDNode {
 		// InetAddress requester = implementation.getComms().getRouteTo(src);
 		TimeAndIntroductionRequest tNreq = mostRecentIntroductionRequestForSrc.remove(src);
 		if (tNreq == null) {
-			LOGGER.warning(
+			logger.warning(
 					this + " Received a feedback message about a connection that has expired or never was: " + m);
 			return;
 		}
@@ -161,7 +161,7 @@ public class ServerProxy extends SNDNode {
 		try {
 			implementation.getComms().send(fm);
 		} catch (IOException e) {
-			LOGGER.severe("Failed transmission: " + e);
+			logger.severe("Failed transmission: " + e);
 		}
 	}
 

@@ -1,5 +1,6 @@
 package com.github.glfrazier.snd.simulation;
 
+import static com.github.glfrazier.snd.simulation.SimVPNFactory.VPN_MAP;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.HashMap;
@@ -12,15 +13,13 @@ import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.SNDMessage;
 import com.github.glfrazier.snd.protocol.message.WrappedMessage;
+import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 import com.github.glfrazier.snd.util.Comms;
 import com.github.glfrazier.snd.util.VPN;
 
 public class SimComms implements Comms {
 
 	private SNDNode owner;
-
-	private final Map<InetAddress, SimVPNImpl> longLivedVPNs = new HashMap<>();
-	private final Map<InetAddress, SimVPNImpl> introducedVPNs = new HashMap<>();
 
 	private Map<InetAddress, InetAddress> routes;
 	private Map<InetAddress, Set<InetAddress>> routeTo;
@@ -64,7 +63,7 @@ public class SimComms implements Comms {
 
 	// @Override
 	private synchronized InetAddress getRouteTo(InetAddress dst) {
-		if (longLivedVPNs.containsKey(dst) || introducedVPNs.containsKey(dst)) {
+		if (VPN_MAP.containsKey(new AddressPair(owner.getAddress(), dst))) {
 			return dst;
 		}
 		InetAddress route = routes.get(dst);
@@ -76,13 +75,7 @@ public class SimComms implements Comms {
 
 	@Override
 	public void send(Message msg) throws IOException {
-		SimVPNImpl vpn = null;
-		synchronized (this) {
-			vpn = longLivedVPNs.get(msg.getDst());
-			if (vpn == null) {
-				vpn = introducedVPNs.get(msg.getDst());
-			}
-		}
+		SimVPNImpl vpn = VPN_MAP.get(new AddressPair(owner.getAddress(), msg.getDst()));
 		if (vpn != null) {
 			vpn.send(msg);
 			return;
@@ -99,58 +92,46 @@ public class SimComms implements Comms {
 
 	@Override
 	public synchronized void openVPN(InetAddress nbr, Object keyingMaterial) throws IOException {
-		if (longLivedVPNs.containsKey(nbr)) {
+		AddressPair key = new AddressPair(owner.getAddress(), nbr);
+		if (VPN_MAP.containsKey(key)) {
 			return;
 		}
 		SimVPNImpl vpn = (SimVPNImpl) owner.getImplementation().getVpnFactory().createVPN(nbr, keyingMaterial);
-		longLivedVPNs.put(nbr, vpn);
 	}
 
 	@Override
 	public synchronized void openIntroducedVPN(InetAddress nbr, IntroductionRequest request, Object keyingMaterial)
 			throws IOException {
-		if (longLivedVPNs.containsKey(nbr)) {
-			System.err.println(this + ": Why were we introduced to a neighbor!?");
-			System.err.println("\tnbr=" + nbr + ", request=" + request);
-			new Exception().printStackTrace();
-			System.exit(-1);
+		AddressPair key = new AddressPair(owner.getAddress(), nbr);
+		SimVPNImpl vpn = VPN_MAP.get(key);
+		if (vpn != null) {
+			synchronized (vpn) {
+				if (VPN_MAP.containsKey(key)) {
+					vpn.addIntroductionRequest(request);
+					return;
+				}
+			}
 		}
-		if (introducedVPNs.containsKey(nbr)) {
-			SimVPNImpl existingVPN = introducedVPNs.get(nbr);
-			existingVPN.addIntroductionRequest(request);
-		}
-		SimVPNImpl vpn = (SimVPNImpl) owner.getImplementation().getVpnFactory().createIntroducedVPN(nbr, request,
-				keyingMaterial);
-		introducedVPNs.put(nbr, vpn);
+		vpn = (SimVPNImpl) owner.getImplementation().getVpnFactory().createIntroducedVPN(nbr, request, keyingMaterial);
 	}
 
 	@Override
 	public boolean closeVPN(InetAddress nbr) throws IOException {
-		SimVPNImpl vpn = null;
-		synchronized (this) {
-			vpn = longLivedVPNs.remove(nbr);
-			if (vpn == null) {
-				vpn = introducedVPNs.remove(nbr);
-			}
+		SimVPNImpl vpn = VPN_MAP.remove(new AddressPair(owner.getAddress(), nbr));
+		if (vpn == null) {
+			return false;
 		}
-		if (vpn != null) {
-			vpn.close();
-			return true;
-		}
-		return false;
+		vpn.close();
+		return true;
 	}
 
 	@Override
-	public boolean closeIntroducedVPN(InetAddress nbr) throws IOException {
-		SimVPNImpl vpn = null;
-		synchronized (this) {
-			vpn = introducedVPNs.remove(nbr);
+	public boolean closeIntroducedVPN(InetAddress nbr, IntroductionRequest ir) throws IOException {
+		SimVPNImpl vpn = VPN_MAP.get(new AddressPair(owner.getAddress(), nbr));
+		if (vpn == null) {
+			return false;
 		}
-		if (vpn != null) {
-			vpn.close();
-			return true;
-		}
-		return false;
+		return vpn.close(ir);
 	}
 
 	@Override
@@ -159,30 +140,25 @@ public class SimComms implements Comms {
 	}
 
 	@Override
-	public synchronized void vpnClosed(VPN v) {
-		SimVPNImpl vpn = (SimVPNImpl) v;
-		longLivedVPNs.remove(vpn.getRemote());
-		introducedVPNs.remove(vpn.getRemote());
-	}
-
-	@Override
 	public synchronized IntroductionRequest getIntroductionRequestForNeighbor(InetAddress nbr, InetAddress requester,
 			InetAddress destination) throws IOException {
 		if (!nbr.equals(requester)) {
 			new Exception("Why are nbr (" + nbr + ") and requester (" + requester + ") different?").printStackTrace();
 		}
-		if (longLivedVPNs.containsKey(nbr)) {
-			return null;
+		SimVPNImpl vpn = VPN_MAP.get(new AddressPair(owner.getAddress(), nbr));
+		if (vpn == null) {
+			throw new IOException(this + " is not connected to " + nbr
+					+ " and so does not have an IntroductionRequest for that connection.");
 		}
-		if (introducedVPNs.containsKey(nbr)) {
-			return introducedVPNs.get(nbr).getIntroductionRequest(// requester,
-					destination);
-		}
-		throw new IOException("Not connected to " + nbr);
+		return vpn.getIntroductionRequest(destination);
 	}
 
 	@Override
-	public boolean isNonIntroducedNeighbor(InetAddress node) {
-		return longLivedVPNs.containsKey(node);
+	public boolean isIntroducedNeighbor(InetAddress node) {
+		SimVPNImpl vpn = VPN_MAP.get(new AddressPair(owner.getAddress(), node));
+		if (vpn == null) {
+			return false;
+		}
+		return vpn.isIntroduced();
 	}
 }

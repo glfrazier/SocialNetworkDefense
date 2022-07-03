@@ -4,11 +4,13 @@ import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Random;
+import java.util.logging.Logger;
 
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.MessageReceiver;
+import com.github.glfrazier.snd.node.SNDNode;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.VPN;
 
@@ -19,6 +21,8 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 			return "Wakeup a traffic generator.";
 		}
 	};
+
+	protected static final Logger LOGGER = Logger.getLogger(TrafficGenerator.class.getName());
 
 	public static final String BENIGN_CONTENT = "Benign Content";
 	public static final String ATTACK_CONTENT = "Attack Content";
@@ -139,6 +143,11 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 
 	public void setAttacker() {
 		isAttacker = true;
+	}
+
+	@Override
+	public Logger getLogger() {
+		return LOGGER;
 	}
 
 }
