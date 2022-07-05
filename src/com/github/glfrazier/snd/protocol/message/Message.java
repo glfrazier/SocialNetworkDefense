@@ -40,7 +40,7 @@ public class Message implements Serializable, Event {
 	}
 
 	public String toString() {
-		return toString("Message");
+		return toString(getClass().getSimpleName());
 	}
 
 	protected String toString(String t) {

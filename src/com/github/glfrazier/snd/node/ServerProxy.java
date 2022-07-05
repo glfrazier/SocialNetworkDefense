@@ -12,6 +12,7 @@ import java.util.Properties;
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
+import com.github.glfrazier.snd.protocol.message.Ack;
 import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedWillRouteMessage;
@@ -77,7 +78,7 @@ public class ServerProxy extends SNDNode {
 		} else {
 			// The server proxy does not perform introductions!
 			try {
-				System.err.println(this + " received unexpted introduction request: " + m);
+				System.err.println(this + " received unexpected introduction request: " + m);
 				implementation.getComms().send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -135,6 +136,12 @@ public class ServerProxy extends SNDNode {
 	 * all up and send the feedback to its "final" introducer.
 	 */
 	protected void processFeedback(FeedbackMessage m) {
+		try {
+			getImplementation().getComms().send(new Ack(m.getSrc(), getAddress()));
+		} catch (IOException e) {
+			// Ignore a failed ack.
+			e.printStackTrace();
+		}
 		if (!m.getSrc().equals(proxiedAppServer)) {
 			new Exception(this + " should only receive feedback messages from " + proxiedAppServer + "! : " + m)
 					.printStackTrace();

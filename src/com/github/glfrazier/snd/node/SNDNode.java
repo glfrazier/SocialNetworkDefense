@@ -18,6 +18,7 @@ import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.Pedigree;
+import com.github.glfrazier.snd.protocol.message.Ack;
 import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionAcceptedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionCompletedMessage;
@@ -166,6 +167,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 	 */
 	@Override
 	public void receive(Message m) {
+		logger.fine(this + ": in node, received " + m);
 		if (!(m instanceof SNDMessage)) {
 			processMessage(m);
 			return;
@@ -255,6 +257,12 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 		if (logger.isLoggable(FINE)) {
 			logger.fine(this + " received " + m);
 		}
+		try {
+			getImplementation().getComms().send(new Ack(m.getSrc(), getAddress()));
+		} catch (IOException e1) {
+			// Ignore a failed ack.
+			e1.printStackTrace();
+		}
 		IntroductionRequest introductionRequest = m.getIntroductionRequest();
 		if (!pendingFeedbacksToReceive.containsKey(introductionRequest)) {
 			logger.severe(this + ": Received feedback for a transaction that is not pending feedback. m=" + m);
@@ -323,6 +331,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 		// System.out.println("\tpedigree is now " + p);
 		addPedigree(p);
 		if (reputationModule.reputationIsGreaterThanThreshold(p, verbose)) {
+			LOGGER.finer(this + ": accepting " + m.getIntroductionRequest());
 			// If the client's reputation is above threshold, create a transaction-specific
 			// VPN to the client and send an Introduction Accepted message.
 			try {
@@ -337,6 +346,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 				logger.severe("Failed to send message: " + e);
 			}
 		} else {
+			LOGGER.finer(this + ": rejecting " + m.getIntroductionRequest());
 			try {
 				implementation.getComms()
 						.send(new IntroductionRefusedMessage(m.getIntroductionRequest(), getAddress()));
@@ -349,6 +359,7 @@ public class SNDNode implements MessageReceiver, EventProcessor {
 
 	private void processTargetResponse(SNDMessage msg) {
 		try {
+			getImplementation().getComms().send(new Ack(msg.getSrc(), getAddress()));
 			if (msg instanceof IntroductionAcceptedMessage) {
 				IntroductionRequest previousIntroduction = implementation.getComms().getIntroductionRequestForNeighbor(
 						msg.getIntroductionRequest().requester, msg.getIntroductionRequest().requester,

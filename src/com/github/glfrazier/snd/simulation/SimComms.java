@@ -1,6 +1,7 @@
 package com.github.glfrazier.snd.simulation;
 
 import static com.github.glfrazier.snd.simulation.SimVPNFactory.VPN_MAP;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.HashMap;
@@ -10,12 +11,12 @@ import java.util.Set;
 
 import com.github.glfrazier.snd.node.SNDNode;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
+import com.github.glfrazier.snd.protocol.message.AddIntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.SNDMessage;
 import com.github.glfrazier.snd.protocol.message.WrappedMessage;
 import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 import com.github.glfrazier.snd.util.Comms;
-import com.github.glfrazier.snd.util.VPN;
 
 public class SimComms implements Comms {
 
@@ -106,8 +107,11 @@ public class SimComms implements Comms {
 		SimVPNImpl vpn = VPN_MAP.get(key);
 		if (vpn != null) {
 			synchronized (vpn) {
+				// Re-check that the vpn is in the VPN_MAP *AFTER* we have synchronized on it.
 				if (VPN_MAP.containsKey(key)) {
-					vpn.addIntroductionRequest(request);
+					if (vpn.addIntroductionRequest(request)) {
+						vpn.send(new AddIntroductionRequestMessage(vpn.getRemote(), owner.getAddress(), request));
+					}
 					return;
 				}
 			}

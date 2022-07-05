@@ -408,8 +408,11 @@ public class Simulation {
 			}
 		}
 		printEvent("The simulation has ended.");
+		long eventsProcessed = eventingSystem.getTotalEventsDelivered();
+		properties.setProperty("events_processed", Long.toString(eventsProcessed));
+		System.out.println("events_processed = " + eventsProcessed);
 		try {
-			stats.save();
+			stats.save(properties);
 		} catch (IOException e) {
 			System.err.println("Failed to save simulation results:");
 			e.printStackTrace();

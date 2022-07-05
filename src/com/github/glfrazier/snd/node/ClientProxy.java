@@ -13,6 +13,7 @@ import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.protocol.ClientConnectToServerProtocol;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.RequestProtocol;
+import com.github.glfrazier.snd.protocol.message.Ack;
 import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.SNDMessage;
@@ -82,6 +83,12 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 			processMessage(m);
 			return;
 		}
+		try {
+			getImplementation().getComms().send(new Ack(m.getSrc(), getAddress()));
+		} catch (IOException e1) {
+			// Ignore a failed ack.
+			e1.printStackTrace();
+		}
 		if (m instanceof FeedbackMessage) {
 			processFeedback((FeedbackMessage) m);
 			return;
@@ -96,6 +103,12 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 
 	@Override
 	protected void processFeedback(FeedbackMessage m) {
+		try {
+			getImplementation().getComms().send(new Ack(m.getSrc(), getAddress()));
+		} catch (IOException e1) {
+			// Ignore a failed ack.
+			e1.printStackTrace();
+		}
 		System.out.println(this + " received " + m);
 //		System.out.println("Eventually, we will want to make the client aware that negative feedback has\n"
 //				+ "been received. And, if we have multiple clients we are routing,\n"

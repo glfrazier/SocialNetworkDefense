@@ -21,8 +21,6 @@ public class Statistics implements Serializable, DenialReporter {
 	public static final String DEFAULT_BASE_DIR = ".";
 	public static final String DEFAULT_RESULTS_DIR = "results";
 
-	private Properties properties;
-
 	private File baseDir;
 	private File resultsDir;
 	private IndividualStatistics stats;
@@ -31,12 +29,11 @@ public class Statistics implements Serializable, DenialReporter {
 	private boolean opened;
 
 	public Statistics(Properties props) {
-		this.properties = props;
 		this.stats = new IndividualStatistics();
-		initialize();
+		initialize(props);
 	}
 
-	private void initialize() {
+	private void initialize(Properties properties) {
 		String baseDirStr = properties.getProperty("snd.stats.base_dir", DEFAULT_BASE_DIR);
 		baseDir = new File(baseDirStr);
 		String resultsDirStr = properties.getProperty("snd.stats.results_dir", DEFAULT_RESULTS_DIR);
@@ -59,8 +56,23 @@ public class Statistics implements Serializable, DenialReporter {
 	 * 
 	 * @throws IOException if statistics cannot be saved
 	 */
-	public synchronized void save() throws IOException {
+	public synchronized void save(Properties properties) throws IOException {
 		closed = true;
+		do {
+			File f = new File(resultsDir, "properties.txt");
+			PrintStream out = new PrintStream(new FileOutputStream(f));
+			SortedSet<String> keys = new TreeSet<>();
+			for (Object key : properties.keySet()) {
+				keys.add(key.toString());
+			}
+			for (String key : keys) {
+				out.print(key);
+				out.print("=");
+				out.println(properties.getProperty(key));
+			}
+			out.close();
+		} while (false);
+
 		for (Object key : properties.keySet()) {
 			String name = key.toString();
 			if (name.startsWith("snd.stats.name") || name.startsWith("snd.stats.desc")) {
@@ -142,26 +154,6 @@ public class Statistics implements Serializable, DenialReporter {
 	 * 
 	 */
 	public synchronized void startSimulation() {
-		try {
-			do {
-				File f = new File(resultsDir, "properties.txt");
-				PrintStream out = new PrintStream(new FileOutputStream(f));
-				SortedSet<String> keys = new TreeSet<>();
-				for (Object key : properties.keySet()) {
-					keys.add(key.toString());
-				}
-				for (String key : keys) {
-					out.print(key);
-					out.print("=");
-					out.println(properties.getProperty(key));
-				}
-				out.close();
-			} while (false);
-
-		} catch (Exception e) {
-			System.err.println("Encountered a problem recording the state of the simulation at its start.");
-			System.exit(-1);
-		}
 		opened = true;
 	}
 

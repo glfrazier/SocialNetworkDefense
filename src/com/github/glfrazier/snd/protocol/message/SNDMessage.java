@@ -5,10 +5,10 @@ import java.net.InetAddress;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 
 /**
- * The messages that comprise the Social Network Dynamics Protocol (SNDP).
+ * The messages that comprise an introduction handshake.
  *
  */
-public class SNDMessage extends Message {
+public abstract class SNDMessage extends Message implements AcknowledgeMessage {
 
 	private static final long serialVersionUID = 1L;
 
@@ -63,10 +63,52 @@ public class SNDMessage extends Message {
 		/**
 		 * Send/receive feedback about a transaction
 		 */
-		FEEDBACK
+		FEEDBACK,
+		
+		/**
+		 * Tell the other end of an introduced VPN to remove an introduction to the VPN
+		 */
+		REMOVE_INTRODUCTION,	
+		
+		/**
+		 * Tell the other end of an introduced VPN to add an introduction to the VPN
+		 */
+		ADD_INTRODUCTION
 	};
 
 	private final IntroductionRequest req;
+	
+	private int sequenceNumber;
+	
+	private int lastContiguousSequenceNumberReceived;
+	
+	private boolean acksSet;
+
+	@Override
+	public int getSequenceNumber() {
+		return sequenceNumber;
+	}
+
+	@Override
+	public void setSequenceNumber(int sequenceNumber) {
+		this.sequenceNumber = sequenceNumber;
+	}
+
+	@Override
+	public int getLastContiguousSequenceNumberReceived() {
+		return lastContiguousSequenceNumberReceived;
+	}
+
+	@Override
+	public void setLastContiguousSequenceNumberReceived(int lastContiguousSequenceNumberReceived) {
+		this.acksSet = true;
+		this.lastContiguousSequenceNumberReceived = lastContiguousSequenceNumberReceived;
+	}
+
+	@Override
+	public boolean containsAcknowledgements() {
+		return acksSet;
+	}
 
 	public SNDMessage(InetAddress dst, InetAddress src, IntroductionRequest req, MessageType type) {
 		super(dst, src);
