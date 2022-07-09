@@ -16,7 +16,7 @@ import com.github.glfrazier.snd.protocol.IntroductionRequest;
  * @author Greg Frazier
  *
  */
-public class IntroductionDeniedWillRouteMessage extends SNDMessage implements Serializable, Event {
+public class IntroductionDeniedWillRouteMessage extends IntroductionMessage implements Serializable, Event {
 
 	/**
 	 * 

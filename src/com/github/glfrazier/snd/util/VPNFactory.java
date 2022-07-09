@@ -3,20 +3,18 @@ package com.github.glfrazier.snd.util;
 import java.io.IOException;
 import java.net.InetAddress;
 
-import com.github.glfrazier.snd.protocol.IntroductionRequest;
+import com.github.glfrazier.snd.node.MessageReceiver;
 
 public interface VPNFactory {
 
 	/**
 	 * Create a long-lived VPN.
 	 * 
-	 * @param remote         the address to which this host is to be connected.
+	 * @param link         the link with which this VPN is associated.
 	 * @param keyingMaterial crypto material needed to construct the VPN.
 	 * @return the created VPN.
 	 * @throws IOException the VPN cannot be created.
 	 */
-	public VPN createVPN(InetAddress remote, Object keyingMaterial) throws IOException;
-
-	public VPN createIntroducedVPN(InetAddress remote, IntroductionRequest transaction, Object keyingMaterial) throws IOException;
+	public VPN createVPN(MessageReceiver local, InetAddress remote, Object keyingMaterial) throws IOException;
 
 }

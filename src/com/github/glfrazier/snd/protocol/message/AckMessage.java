@@ -6,13 +6,14 @@ import java.net.InetAddress;
  * Acknowledge receipt of SND messages.
  * 
  */
-public class Ack extends Message {
+public class AckMessage extends SNDPMessage {
 
+	private static final long serialVersionUID = 1L;
 	private int lastContiguousSequenceNumberReceived;
 	private boolean containsAcks;
 	
-	public Ack(InetAddress dst, InetAddress src) {
-		super(dst, src);
+	public AckMessage(InetAddress dst, InetAddress src) {
+		super(dst, src, MessageType.ACK);
 	}
 	
 	/**
@@ -51,8 +52,4 @@ public class Ack extends Message {
 		return containsAcks;
 	}
 	
-	@Override
-	public String toString() {
-		return super.toString("Ack");
-	}
 }

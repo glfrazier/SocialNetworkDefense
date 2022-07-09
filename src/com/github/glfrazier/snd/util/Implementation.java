@@ -8,8 +8,6 @@ package com.github.glfrazier.snd.util;
  */
 public interface Implementation {
 
-	public Comms getComms();
-	
 	public DiscoveryService getDiscoveryService();
 
 	public VPNFactory getVpnFactory();

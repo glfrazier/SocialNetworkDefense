@@ -1,9 +1,8 @@
-package com.github.glfrazier.snd.simulation;
+package com.github.glfrazier.snd.node;
 
-import static com.github.glfrazier.snd.simulation.SimVPNFactory.VPN_MAP;
 import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
+import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
-import static java.util.logging.Level.WARNING;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -12,6 +11,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
@@ -19,25 +19,25 @@ import java.util.logging.Logger;
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
-import com.github.glfrazier.snd.node.MessageReceiver;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
-import com.github.glfrazier.snd.protocol.message.Ack;
+import com.github.glfrazier.snd.protocol.message.AckMessage;
 import com.github.glfrazier.snd.protocol.message.AcknowledgeMessage;
 import com.github.glfrazier.snd.protocol.message.AddIntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionCompletedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedMessage;
+import com.github.glfrazier.snd.protocol.message.IntroductionMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.RemoveIntroductionRequestMessage;
-import com.github.glfrazier.snd.protocol.message.SNDMessage;
-import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
+import com.github.glfrazier.snd.protocol.message.SNDPMessage;
 import com.github.glfrazier.snd.util.TimeAndAcknowledgeMessage;
 import com.github.glfrazier.snd.util.VPN;
+import com.github.glfrazier.snd.util.VPNFactory;
 
-public class SimVPNImpl implements VPN, EventProcessor {
+public class Link implements EventProcessor, MessageReceiver {
 
-	private static final long MESSAGE_LATENCY = 10; // 1/100th of a second
-	private static final long ACK_TIMEOUT = 6 * MESSAGE_LATENCY;
+	public static final long TRANSMISSION_LATENCY = 10; // 1/100th of a second
+	private static final long ACK_TIMEOUT = 6 * TRANSMISSION_LATENCY;
 	private static final Event CHECK_TIMEOUTS = new Event() {
 		private final String NAME = "Check Timeouts in SNDP Transmissions.";
 
@@ -45,9 +45,19 @@ public class SimVPNImpl implements VPN, EventProcessor {
 			return NAME;
 		}
 	};
+	private static final Event VPN_CLOSED = new Event() {
+		private final String NAME = "VPN cLosed";
+
+		public String toString() {
+			return NAME;
+		}
+	};
 
 	private static enum State {
-		UNCONNECTED, OPEN, HALF_CLOSED, CLOSED
+		NASCENT, // ... created but unconnected
+		OPEN, // ...... connected, ready for action
+		HALF_CLOSED, // all introduction requests have been removed
+		CLOSED // ..... really closed
 	};
 
 	private static final AtomicLong INDEX = new AtomicLong(0);
@@ -55,15 +65,17 @@ public class SimVPNImpl implements VPN, EventProcessor {
 	private static final boolean RETRANSMITTING = true;
 
 	private final long uuid;
-	private final MessageReceiver local;
+	private final SNDNode local;
 	private final InetAddress remote;
-	private SimVPNImpl remoteVPN;
+	private VPN vpn;
 	private int sequenceNumber;
 	private int lastContiguousSequenceNumberReceived;
 	private boolean messagesHaveBeenReceived;
 	private List<TimeAndAcknowledgeMessage> unacknowledgedMessages;
 	private final Set<IntroductionRequest> introductionRequests;
 	private final EventingSystem eventingSystem;
+
+	private final Map<InetAddress, Link> linkMap;
 
 	private State state;
 
@@ -72,12 +84,13 @@ public class SimVPNImpl implements VPN, EventProcessor {
 	private final Logger LOGGER;
 	private boolean pendingTimeoutCheckWakeup;
 
-	public SimVPNImpl(MessageReceiver local, InetAddress remote, EventingSystem eventingSystem) {
-		this(local, remote, null, eventingSystem);
+	public Link(SNDNode local, InetAddress remote, Object keyingMaterial, EventingSystem eventingSystem,
+			Map<InetAddress, Link> linkMap, VPNFactory vpnFactory) throws IOException {
+		this(local, remote, keyingMaterial, null, eventingSystem, linkMap, vpnFactory);
 	}
 
-	public SimVPNImpl(MessageReceiver local, InetAddress remote, IntroductionRequest introReq,
-			EventingSystem eventingSystem) {
+	public Link(SNDNode local, InetAddress remote, Object keyingMaterial, IntroductionRequest introReq,
+			EventingSystem eventingSystem, Map<InetAddress, Link> linkMap, VPNFactory vpnFactory) throws IOException {
 		uuid = INDEX.getAndIncrement();
 		this.local = local;
 		this.remote = remote;
@@ -97,9 +110,11 @@ public class SimVPNImpl implements VPN, EventProcessor {
 		this.unacknowledgedMessages = new LinkedList<>();
 
 		this.LOGGER = local.getLogger();
-		state = State.UNCONNECTED;
-		VPN_MAP.put(new AddressPair(local.getAddress(), remote), this);
-		connect();
+		linkMap.put(remote, this);
+		this.linkMap = linkMap;
+//		connect();
+		state = State.NASCENT;
+		vpn = vpnFactory.createVPN(this, remote, keyingMaterial);
 		if (LOGGER.isLoggable(FINEST)) {
 			LOGGER.finest(this + " created.");
 		}
@@ -110,34 +125,29 @@ public class SimVPNImpl implements VPN, EventProcessor {
 			// If the VPN is closed, we no longer check for timeouts.
 			return;
 		}
-		if (state == State.OPEN) {
-			// We only check for timeouts if the VPN is open
-			//
-			long now = eventingSystem.getCurrentTime();
-			while (true) {
-				if (unacknowledgedMessages.isEmpty()) {
-					break;
+		long now = eventingSystem.getCurrentTime();
+		while (true) {
+			if (unacknowledgedMessages.isEmpty()) {
+				break;
+			}
+			TimeAndAcknowledgeMessage t = unacknowledgedMessages.get(0);
+			if (now - t.time < ACK_TIMEOUT) {
+				break;
+			}
+			// Note that send(Message, boolean) will requeue the message onto the back of
+			// the list.
+			t = unacknowledgedMessages.remove(0);
+			try {
+				if (LOGGER.isLoggable(FINE)) {
+					LOGGER.fine(this + ": t=" + eventingSystem.getCurrentTime() + ", retransmitting " + t.message);
 				}
-				TimeAndAcknowledgeMessage t = unacknowledgedMessages.get(0);
-				if (now - t.time < ACK_TIMEOUT) {
-					break;
-				}
-				// Note that send(Message, boolean) will requeue the message onto the back of
-				// the list.
-				t = unacknowledgedMessages.remove(0);
-				try {
-					if (LOGGER.isLoggable(WARNING)) {
-						LOGGER.warning(
-								this + ": t=" + eventingSystem.getCurrentTime() + ", retransmitting " + t.message);
-					}
-					send((Message) t.message, RETRANSMITTING);
-				} catch (IOException e) {
-					// If a retransmission fails, just drop it on the floor. Clearly this VPN is in
-					// a bad state.
-					LOGGER.severe(this + ": t=" + eventingSystem.getCurrentTime() + ", failed to retransmit "
-							+ t.message + ": " + e);
-					e.printStackTrace();
-				}
+				send((Message) t.message, RETRANSMITTING);
+			} catch (IOException e) {
+				// If a retransmission fails, just drop it on the floor. Clearly this VPN is in
+				// a bad state.
+				LOGGER.severe(this + ": t=" + eventingSystem.getCurrentTime() + ", failed to retransmit " + t.message
+						+ ": " + e);
+				e.printStackTrace();
 			}
 		}
 		if (unacknowledgedMessages.isEmpty()) {
@@ -158,13 +168,17 @@ public class SimVPNImpl implements VPN, EventProcessor {
 	}
 
 	public boolean equals(Object o) {
-		if (!(o instanceof SimVPNImpl)) {
+		if (!(o instanceof Link)) {
 			return false;
 		}
-		return uuid == ((SimVPNImpl) o).uuid;
+		return uuid == ((Link) o).uuid;
 	}
 
 	public synchronized void send(Message m) throws IOException {
+		if (state != State.OPEN) {
+			throw new IOException(this + " time=" + eventingSystem.getCurrentTime() + " is not open. state=" + state
+					+ ", attempting to send " + m);
+		}
 		send(m, false);
 	}
 
@@ -172,29 +186,25 @@ public class SimVPNImpl implements VPN, EventProcessor {
 		if (LOGGER.isLoggable(FINEST)) {
 			LOGGER.finest(this + " sending " + m);
 		}
-		if (state != State.OPEN) {
-			throw new IOException(this + " time=" + eventingSystem.getCurrentTime() + " is not open. state=" + state
-					+ ", attempting to send " + m);
-		}
 		if (!isRetransmission) {
 			if (m instanceof IntroductionRequestMessage) {
 				IntroductionRequest ir = ((IntroductionRequestMessage) m).getIntroductionRequest();
-				this.addIntroductionRequest(ir);
+				this.beginIntroductionSequence(ir);
 			}
 			if (m instanceof IntroductionDeniedMessage || //
 					m instanceof IntroductionCompletedMessage) {
-				IntroductionRequest ir = ((SNDMessage) m).getIntroductionRequest();
-				if (remoteVPN.LOGGER.isLoggable(FINEST)) {
-					remoteVPN.LOGGER.finest(this + " sending " + m + ", removing " + ir);
-				}
-				this.removeIntroductionRequest(ir);
+				IntroductionRequest ir = ((IntroductionMessage) m).getIntroductionRequest();
+//				if (remoteVPN.LOGGER.isLoggable(FINEST)) {
+//					remoteVPN.LOGGER.finest(this + " sending " + m + ", removing " + ir);
+//				}
+				this.endIntroductionSequence(ir);
 			}
 			if (m instanceof AcknowledgeMessage) {
 				((AcknowledgeMessage) m).setSequenceNumber(sequenceNumber++);
 			}
 		}
-		if (m instanceof Ack) {
-			((Ack) m).setLastContiguousSequenceNumberReceived(lastContiguousSequenceNumberReceived);
+		if (m instanceof AckMessage) {
+			((AckMessage) m).setLastContiguousSequenceNumberReceived(lastContiguousSequenceNumberReceived);
 		}
 		if (m instanceof AcknowledgeMessage) {
 			if (messagesHaveBeenReceived) {
@@ -207,34 +217,59 @@ public class SimVPNImpl implements VPN, EventProcessor {
 				eventingSystem.scheduleEventRelative(this, CHECK_TIMEOUTS, ACK_TIMEOUT);
 			}
 		}
-		eventingSystem.scheduleEventRelative(remoteVPN, m, MESSAGE_LATENCY);
-	}
-
-	/**
-	 * Given that two Communicators A and B are linked via VPN, this method
-	 * associates A's VPN to B with B's VPN to A.
-	 */
-	private void connect() {
-		synchronized (this) {
-			if (state == State.OPEN) {
+		try {
+			vpn.send(m);
+		} catch (IOException e) {
+			if (m instanceof SNDPMessage) {
+				// SNDP handles retransmissions
 				return;
 			}
-			remoteVPN = VPN_MAP.get(new AddressPair(remote, local.getAddress()));
-			if (remoteVPN == null) {
-				return;
-			}
-			// sanity check!
-			if (this.isIntroduced() != remoteVPN.isIntroduced()) {
-				throw new IllegalStateException(this + " cannot be connected to " + remoteVPN);
-			}
-			state = State.OPEN;
+			// For application messages, we throw the IOException
+			throw e;
 		}
-		remoteVPN.connect();
 	}
 
-	private synchronized void receive(Message m) throws IOException {
+//	/**
+//	 * Given that two Communicators A and B are linked via VPN, this method
+//	 * associates A's VPN to B with B's VPN to A.
+//	 */
+//	private void connect() {
+//		synchronized (this) {
+//			if (state == State.OPEN) {
+//				return;
+//			}
+//			remoteVPN = VPN_MAP.get(new AddressPair(remote, local.getAddress()));
+//			if (remoteVPN == null) {
+//				return;
+//			}
+//			// sanity check!
+//			if (this.isIntroduced() != remoteVPN.isIntroduced()) {
+//				throw new IllegalStateException(this + " cannot be connected to " + remoteVPN);
+//			}
+//			state = State.OPEN;
+//		}
+//		remoteVPN.connect();
+//	}
+
+	private void endIntroductionSequence(IntroductionRequest ir) {
+		// TODO Auto-generated method stub
+
+	}
+
+	private void beginIntroductionSequence(IntroductionRequest ir) {
+		// TODO Auto-generated method stub
+
+	}
+
+	public synchronized void receive(Message m) {
 		if (LOGGER.isLoggable(FINEST)) {
-			LOGGER.finest(this + " received " + m);
+			if (m instanceof AcknowledgeMessage) {
+				LOGGER.finest(this + " received " + m + ", sequence#=" + ((AcknowledgeMessage) m).getSequenceNumber()
+						+ ", lastContiguousSequenceNumberReceived=" + lastContiguousSequenceNumberReceived);
+			} else {
+				LOGGER.finest(this + " received " + m + ", there is no sequence#, lastContiguousSequenceNumberReceived="
+						+ lastContiguousSequenceNumberReceived);
+			}
 		}
 
 		// A closed VPN should never receive a message!
@@ -243,8 +278,8 @@ public class SimVPNImpl implements VPN, EventProcessor {
 			System.exit(-1);
 		}
 
-		if (m instanceof Ack) {
-			Ack ack = (Ack) m;
+		if (m instanceof AckMessage) {
+			AckMessage ack = (AckMessage) m;
 			int lcsnr = ack.getLastContiguousSequenceNumberReceived();
 			processLCSNR(lcsnr);
 			return;
@@ -273,8 +308,17 @@ public class SimVPNImpl implements VPN, EventProcessor {
 				// logic to handle roll-over
 						(sn > 0 || lastContiguousSequenceNumberReceived < 0)) {
 					// This is a retransmission of a message we already successfully received.
-					// Ignore it!
-					LOGGER.warning(this + ": ignoring " + m + " because its sequence number is too low.");
+					// Send an ack so that it won't be retransmitted again.
+					try {
+						vpn.send(new AckMessage(remote, local.getAddress()));
+					} catch (IOException e) {
+						forceClose();
+						return;
+					}
+					// Drop the msg.
+					if (LOGGER.isLoggable(FINE)) {
+						LOGGER.fine(this + ": ignoring " + m + " because its sequence number is too low.");
+					}
 					return;
 				}
 				if (sn == lastContiguousSequenceNumberReceived + 1) {
@@ -282,7 +326,9 @@ public class SimVPNImpl implements VPN, EventProcessor {
 				} else {
 					// We dropped a message somewhere!!
 					// So ignore this message.
-					LOGGER.warning(this + ": ignoring " + m + " because we skipped a sequence number.");
+					if (LOGGER.isLoggable(FINE)) {
+						LOGGER.fine(this + ": ignoring " + m + " because we skipped a sequence number.");
+					}
 					return;
 				}
 			}
@@ -292,33 +338,41 @@ public class SimVPNImpl implements VPN, EventProcessor {
 		// closed VPNs.
 		if (m instanceof RemoveIntroductionRequestMessage) {
 			try {
-				send(new Ack(remote, local.getAddress()));
+				send(new AckMessage(remote, local.getAddress()));
 			} catch (IOException e1) {
 				// Ignore a failed ack.
 				e1.printStackTrace();
 			}
 			this.removeIntroductionRequest(((RemoveIntroductionRequestMessage) m).getIntroductionRequest());
-			if (remoteVPN.LOGGER.isLoggable(FINEST)) {
-				remoteVPN.LOGGER
-						.finest(this + " received " + m + ", now has introductionRequests=" + introductionRequests);
-			}
+//			if (remoteVPN.LOGGER.isLoggable(FINEST)) {
+//				remoteVPN.LOGGER
+//						.finest(this + " received " + m + ", now has introductionRequests=" + introductionRequests);
+//			}
 			return;
 		}
 
 		// Another implementation-specific message, but one that should not arrive at
 		// closed VPNs.
 		if (m instanceof AddIntroductionRequestMessage) {
-			this.addIntroductionRequest(((AddIntroductionRequestMessage) m).getIntroductionRequest());
 			try {
-				send(new Ack(remote, local.getAddress()));
+				this.addIntroductionRequest(((AddIntroductionRequestMessage) m).getIntroductionRequest());
+			} catch (IOException e) {
+				// THIS SHOULD NEVER HAPPEN!
+				// addIntroductionRequest throws IOException if the connection is closed. But we
+				// are in receive(Message), and so we know that the connection is open.
+				new Exception().printStackTrace();
+				System.exit(-1);
+			}
+			try {
+				send(new AckMessage(remote, local.getAddress()));
 			} catch (IOException e1) {
-				// Ignore a failed ack.
-				e1.printStackTrace();
+				forceClose();
+				return;
 			}
-			if (remoteVPN.LOGGER.isLoggable(FINEST)) {
-				remoteVPN.LOGGER
-						.finest(this + " received " + m + ", now has introductionRequests=" + introductionRequests);
-			}
+//			if (remoteVPN.LOGGER.isLoggable(FINEST)) {
+//				remoteVPN.LOGGER
+//						.finest(this + " received " + m + ", now has introductionRequests=" + introductionRequests);
+//			}
 			return;
 		}
 
@@ -326,17 +380,32 @@ public class SimVPNImpl implements VPN, EventProcessor {
 		// these are ALSO received by the owning node.
 		if (m instanceof IntroductionRequestMessage) {
 			IntroductionRequest ir = ((IntroductionRequestMessage) m).getIntroductionRequest();
-			this.addIntroductionRequest(ir);
+			this.beginIntroductionSequence(ir);
 		}
 		if (m instanceof IntroductionDeniedMessage || //
 				m instanceof IntroductionCompletedMessage) {
-			IntroductionRequest ir = ((SNDMessage) m).getIntroductionRequest();
-			this.removeIntroductionRequest(ir);
+			IntroductionRequest ir = ((IntroductionMessage) m).getIntroductionRequest();
+			this.endIntroductionSequence(ir);
 		}
 
 		// The owning node receives the message.
 		local.receive(m);
 	}
+
+	private synchronized void forceClose() {
+		// We attempted to send, and the VPN threw an IOException. In other words, we
+		// have no VPN under this link. So, immediately kill it.
+		state = State.CLOSED;
+		if (introductionRequests != null) {
+			introductionRequests.clear();
+		}
+		unacknowledgedMessages.clear();
+		vpn.close();
+		linkMap.remove(remote);
+	}
+
+	// TODO There should be a timeout for us being in the half-closed state that
+	// takes us to closed.
 
 	/**
 	 * Process the neighbor's last contiguous sequence number received (LCSNR). This
@@ -355,6 +424,9 @@ public class SimVPNImpl implements VPN, EventProcessor {
 		}
 		if (state == State.HALF_CLOSED && unacknowledgedMessages.isEmpty()) {
 			state = State.CLOSED;
+			vpn.close();
+			LOGGER.fine(this + ": closed.");
+			local.linkClosed(remote);
 		}
 	}
 
@@ -366,7 +438,7 @@ public class SimVPNImpl implements VPN, EventProcessor {
 		if (state == State.CLOSED || state == State.HALF_CLOSED) {
 			return;
 		}
-		VPN_MAP.remove(new AddressPair(local.getAddress(), remote));
+		linkMap.remove(remote);
 		if (LOGGER.isLoggable(FINEST)) {
 			LOGGER.finest(this + " close invoked. Going to HALF_CLOSED.");
 		}
@@ -396,16 +468,15 @@ public class SimVPNImpl implements VPN, EventProcessor {
 	@Override
 	public void process(Event e, EventingSystem eventingSystem) {
 		if (e instanceof Message) {
-			try {
-				receive((Message) e);
-			} catch (IOException e1) {
-				e1.printStackTrace();
-				System.exit(0);
-			}
+			receive((Message) e);
 			return;
 		}
 		if (e == CHECK_TIMEOUTS) {
 			checkTimeouts();
+			return;
+		}
+		if (e == VPN_CLOSED) {
+			forceClose();
 		}
 	}
 
@@ -455,7 +526,10 @@ public class SimVPNImpl implements VPN, EventProcessor {
 				LOGGER.finest(this + " took state from HALF_CLOSED to OPEN.");
 			}
 			state = State.OPEN;
-			VPN_MAP.put(new AddressPair(local.getAddress(), remote), this);
+			linkMap.put(remote, this);
+		}
+		if (state == State.NASCENT) {
+			result = false;
 		}
 		return result;
 	}
@@ -478,13 +552,19 @@ public class SimVPNImpl implements VPN, EventProcessor {
 			if (LOGGER.isLoggable(FINEST)) {
 				LOGGER.finest(this + " has no introduction requests -- go to half-closed.");
 			}
-			VPN_MAP.remove(new AddressPair(local.getAddress(), remote));
+			linkMap.remove(remote);
 			if (LOGGER.isLoggable(FINEST)) {
 				LOGGER.finest(this + " removed all introduction requests and is closing.");
 			}
 			state = State.HALF_CLOSED;
 			if (LOGGER.isLoggable(FINEST)) {
 				LOGGER.finest(this + " is now half closed!!!!");
+			}
+			if (unacknowledgedMessages.isEmpty()) {
+				if (LOGGER.isLoggable(FINEST)) {
+					LOGGER.finest(this + ": unacknowledgedMessages.isEmpty(). Link is fully closing.");
+				}
+				forceClose();
 			}
 			result = true;
 		}
@@ -497,6 +577,25 @@ public class SimVPNImpl implements VPN, EventProcessor {
 					this + " is not an introduced VPN, so hasNoIntroductions() is nonsense.");
 		}
 		return introductionRequests.isEmpty();
+	}
+
+	public SNDNode getOwner() {
+		return local;
+	}
+
+	@Override
+	public InetAddress getAddress() {
+		return local.getAddress();
+	}
+
+	@Override
+	public void vpnClosed(VPN vpn) {
+		eventingSystem.scheduleEvent(this, VPN_CLOSED);
+	}
+
+	@Override
+	public void vpnOpened(VPN vpn) {
+		state = State.OPEN;
 	}
 
 }

@@ -1,6 +1,6 @@
 package com.github.glfrazier.snd.protocol.message;
 
-import com.github.glfrazier.snd.simulation.SimVPNImpl;
+import com.github.glfrazier.snd.node.Link;
 
 /**
  * An AcknowledgeMessage is a message that has a VPN sequence number and
@@ -17,7 +17,7 @@ public interface AcknowledgeMessage {
 
 	/**
 	 * Get the sequence number of this message. See the implementations of
-	 * {@link SimVPNImpl#send(Message)} and {@link SimVPNImpl#receive(Message)}
+	 * {@link Link#send(Message)} and {@link Link#receive(Message)}
 	 * 
 	 * @return the message's sequence number
 	 */
@@ -25,7 +25,7 @@ public interface AcknowledgeMessage {
 
 	/**
 	 * Set the sequence number of this message. See the implementations of
-	 * {@link SimVPNImpl#send(Message)} and {@link SimVPNImpl#receive(Message)}
+	 * {@link Link#send(Message)} and {@link Link#receive(Message)}
 	 */
 	public void setSequenceNumber(int sequenceNumber);
 

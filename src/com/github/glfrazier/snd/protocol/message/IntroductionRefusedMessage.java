@@ -6,7 +6,7 @@ import java.net.InetAddress;
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 
-public class IntroductionRefusedMessage extends SNDMessage implements Serializable, Event {
+public class IntroductionRefusedMessage extends IntroductionMessage implements Serializable, Event {
 
 	/**
 	 * 

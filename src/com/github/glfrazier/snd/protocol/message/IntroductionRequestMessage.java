@@ -26,7 +26,7 @@ import com.github.glfrazier.statemachine.StateMachine;
  * @author Greg Frazier
  *
  */
-public class IntroductionRequestMessage extends SNDMessage implements Serializable, Event {
+public class IntroductionRequestMessage extends IntroductionMessage implements Serializable, Event {
 
 	public static final IntroductionRequestMessage SAMPLE_INTRODUCTION_REQUEST_MSG = new IntroductionRequestMessage(
 			SAMPLE_INTRODUCTION_REQUEST);

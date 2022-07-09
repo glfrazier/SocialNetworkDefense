@@ -13,10 +13,10 @@ import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.protocol.ClientConnectToServerProtocol;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.RequestProtocol;
-import com.github.glfrazier.snd.protocol.message.Ack;
+import com.github.glfrazier.snd.protocol.message.AckMessage;
 import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
-import com.github.glfrazier.snd.protocol.message.SNDMessage;
+import com.github.glfrazier.snd.protocol.message.IntroductionMessage;
 import com.github.glfrazier.snd.protocol.message.WrappedMessage;
 import com.github.glfrazier.snd.util.AddressUtils;
 import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
@@ -41,10 +41,10 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 	public synchronized void connectAppClient(InetAddress app) throws IOException {
 		if (proxiedAppClient != null) {
 			proxiedAppClient = null;
-			implementation.getComms().closeVPN(proxiedAppClient);
+			router.closeLink(proxiedAppClient);
 		}
 		try {
-			implementation.getComms().openVPN(app, null);
+			router.openLink(app, null);
 			proxiedAppClient = app;
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -63,14 +63,14 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 	public void connectInitialIntroducer(InetAddress introducer) {
 		if (initialIntroducer != null) {
 			try {
-				implementation.getComms().closeVPN(initialIntroducer);
+				router.closeLink(initialIntroducer);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		}
 		this.initialIntroducer = introducer;
 		try {
-			implementation.getComms().openVPN(introducer, null);
+			router.openLink(introducer, null);
 		} catch (IOException e) {
 			e.printStackTrace();
 			System.exit(-1);
@@ -79,12 +79,12 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 
 	@Override
 	public void receive(Message m) {
-		if (!(m instanceof SNDMessage)) {
+		if (!(m instanceof IntroductionMessage)) {
 			processMessage(m);
 			return;
 		}
 		try {
-			getImplementation().getComms().send(new Ack(m.getSrc(), getAddress()));
+			router.send(new AckMessage(m.getSrc(), getAddress()));
 		} catch (IOException e1) {
 			// Ignore a failed ack.
 			e1.printStackTrace();
@@ -93,7 +93,7 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 			processFeedback((FeedbackMessage) m);
 			return;
 		}
-		SNDMessage msg = (SNDMessage) m;
+		IntroductionMessage msg = (IntroductionMessage) m;
 		RequestProtocol proto = introductionSequences.get(msg.getIntroductionRequest());
 		if (proto == null) {
 			throw new IllegalStateException("Received an SND message for a protocol that does not exist!");
@@ -103,8 +103,9 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 
 	@Override
 	protected void processFeedback(FeedbackMessage m) {
+		System.out.println(this + " processing " + m);
 		try {
-			getImplementation().getComms().send(new Ack(m.getSrc(), getAddress()));
+			router.send(new AckMessage(m.getSrc(), getAddress()));
 		} catch (IOException e1) {
 			// Ignore a failed ack.
 			e1.printStackTrace();
@@ -125,13 +126,13 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 				// (packet?) to the application client.
 				try {
 					IntroductionRequest ir = destinationIntroductionMap.get(new AddressUtils.AddressPair(enc.getSrc(), enc.getDst()));
-					implementation.getComms().closeIntroducedVPN(m.getSrc(), ir);
+					router.closeIntroducedVPN(m.getSrc(), ir);
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 				try {
-					implementation.getComms().send(enc);
+					router.send(enc);
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -167,7 +168,7 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 //		}
 //		Message m = proto.getMessage();
 //		try {
-//			implementation.getComms().send(m);
+//			router.send(m);
 //		} catch (IOException e) {
 //			// TODO do something about a failure
 //			return;
@@ -183,7 +184,7 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 		introductionSequences.put(intro.getIntroductionRequest(), intro);
 	}
 
-	public void addIntroductionToDestionation(InetAddress dst, InetAddress src, IntroductionRequest introductionRequest) {
+	public void addIntroductionToDestination(InetAddress dst, InetAddress src, IntroductionRequest introductionRequest) {
 		destinationIntroductionMap.put(new AddressPair(dst, src), introductionRequest);
 	}
 

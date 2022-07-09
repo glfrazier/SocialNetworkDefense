@@ -1,6 +1,7 @@
 package com.github.glfrazier.snd.protocol.message;
 
 import static com.github.glfrazier.snd.protocol.IntroductionRequest.SAMPLE_INTRODUCTION_REQUEST;
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 
 import java.io.Serializable;
 import java.net.InetAddress;
@@ -14,7 +15,7 @@ import com.github.glfrazier.snd.protocol.IntroductionRequest;
  * accepted to the introducer, providing feedback regarding the transaction.
  *
  */
-public class FeedbackMessage extends SNDMessage implements Serializable, Event {
+public class FeedbackMessage extends IntroductionMessage implements Serializable, Event {
 
 	/**
 	 * 
@@ -87,7 +88,7 @@ public class FeedbackMessage extends SNDMessage implements Serializable, Event {
 	@Override
 	public String toString() {
 		String result = super.toString();
-		return result + " regarding " + getSubject();
+		return result + " regarding " + addrToString(getSubject());
 	}
 
 }

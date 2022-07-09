@@ -4,7 +4,7 @@ import java.net.InetAddress;
 
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 
-public class AddIntroductionRequestMessage extends SNDMessage {
+public class AddIntroductionRequestMessage extends IntroductionMessage {
 
 	private static final long serialVersionUID = 1L;
 

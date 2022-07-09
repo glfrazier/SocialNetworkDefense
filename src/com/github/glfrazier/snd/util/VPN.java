@@ -1,7 +1,12 @@
 package com.github.glfrazier.snd.util;
 
+import java.io.IOException;
+
+import com.github.glfrazier.snd.node.Link;
+import com.github.glfrazier.snd.protocol.message.Message;
+
 /**
- * A tagging interface for the object returned by a VPNFactory implementation.
+ * A VPN sends messages. Receive occurs via {@link Link#receive(Message)} callback.
  * 
  * @see VPNFactory#createVPN(java.net.InetAddress, Object)
  * @see VPNFactory#createIntroducedVPN(java.net.InetAddress,
@@ -9,4 +14,8 @@ package com.github.glfrazier.snd.util;
  */
 public interface VPN {
 
+	public void send(Message m) throws IOException;
+
+	public void close();
+	
 }

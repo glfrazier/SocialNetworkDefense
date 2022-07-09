@@ -9,7 +9,6 @@ import com.github.glfrazier.snd.protocol.message.IntroductionCompletedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedWillRouteMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionRequestMessage;
-import com.github.glfrazier.snd.util.VPN;
 import com.github.glfrazier.statemachine.EventImpl;
 import com.github.glfrazier.statemachine.State;
 import com.github.glfrazier.statemachine.StateMachine;
@@ -64,7 +63,7 @@ public class RequestProtocol extends StateMachine {
 		this.request = request;
 		State sendRequestState = new State("Send Request", createIntroductionRequestAction(this));
 		setStartState(sendRequestState);
-		State failureState = new State("Failure");
+		State failureState = new State("Failure", createIntroductionFailedAction(this));
 		Transition t = new Transition(sendRequestState, TIMEOUT_EVENT, failureState);
 		addTransition(t);
 		t = new Transition(sendRequestState, IntroductionDeniedMessage.SAMPLE_INTRODUCTION_DENIED, failureState);
@@ -100,7 +99,7 @@ public class RequestProtocol extends StateMachine {
 			public void act(State s, Event e) {
 				IntroductionRequestMessage req = new IntroductionRequestMessage(requestProtocol.request);
 				try {
-					requester.getImplementation().getComms().send(req);
+					requester.router.send(req);
 				} catch (IOException e1) {
 					// TODO Auto-generated catch block
 					e1.printStackTrace();
@@ -118,11 +117,21 @@ public class RequestProtocol extends StateMachine {
 				IntroductionCompletedMessage successMsg = (IntroductionCompletedMessage) e;
 				target = successMsg.getNewNeighbor();
 				try {
-					requester.getImplementation().getComms().openIntroducedVPN(target, request, successMsg.getKeyingMaterial());
+					requester.router.openIntroducedLink(target, request, successMsg.getKeyingMaterial());
 				} catch (IOException e1) {
 					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
+			}
+		};
+	}
+
+	private State.Action createIntroductionFailedAction(RequestProtocol requestProtocol) {
+
+		return new State.Action() {
+			@Override
+			public void act(State s, Event e) {
+				requestProtocol.requester.getLogger().warning(this + ": " + request + " DENIED");
 			}
 		};
 	}

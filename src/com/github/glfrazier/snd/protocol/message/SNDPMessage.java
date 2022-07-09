@@ -8,7 +8,7 @@ import com.github.glfrazier.snd.protocol.IntroductionRequest;
  * The messages that comprise an introduction handshake.
  *
  */
-public abstract class SNDMessage extends Message implements AcknowledgeMessage {
+public abstract class SNDPMessage extends Message {
 
 	private static final long serialVersionUID = 1L;
 
@@ -64,102 +64,41 @@ public abstract class SNDMessage extends Message implements AcknowledgeMessage {
 		 * Send/receive feedback about a transaction
 		 */
 		FEEDBACK,
-		
+
 		/**
 		 * Tell the other end of an introduced VPN to remove an introduction to the VPN
 		 */
-		REMOVE_INTRODUCTION,	
-		
+		REMOVE_INTRODUCTION,
+
 		/**
 		 * Tell the other end of an introduced VPN to add an introduction to the VPN
 		 */
-		ADD_INTRODUCTION
+		ADD_INTRODUCTION,
+
+		/**
+		 * Acknowledge receipt of messages.
+		 */
+		ACK,
+
+		/**
+		 * Let the opposing node know that the link has been half-closed. This has the
+		 * semantics of an ACK, except that it must itself be acknowledged.
+		 */
+		LINK_HALF_CLOSED
 	};
 
-	private final IntroductionRequest req;
-	
-	private int sequenceNumber;
-	
-	private int lastContiguousSequenceNumberReceived;
-	
-	private boolean acksSet;
-
-	@Override
-	public int getSequenceNumber() {
-		return sequenceNumber;
-	}
-
-	@Override
-	public void setSequenceNumber(int sequenceNumber) {
-		this.sequenceNumber = sequenceNumber;
-	}
-
-	@Override
-	public int getLastContiguousSequenceNumberReceived() {
-		return lastContiguousSequenceNumberReceived;
-	}
-
-	@Override
-	public void setLastContiguousSequenceNumberReceived(int lastContiguousSequenceNumberReceived) {
-		this.acksSet = true;
-		this.lastContiguousSequenceNumberReceived = lastContiguousSequenceNumberReceived;
-	}
-
-	@Override
-	public boolean containsAcknowledgements() {
-		return acksSet;
-	}
-
-	public SNDMessage(InetAddress dst, InetAddress src, IntroductionRequest req, MessageType type) {
+	public SNDPMessage(InetAddress dst, InetAddress src, MessageType type) {
 		super(dst, src);
-		this.req = req;
 		this.type = type;
 	}
 
 	public MessageType getType() {
 		return type;
 	}
-	
-	public IntroductionRequest getIntroductionRequest() {
-		return req;
-	}
 
 	@Override
 	public String toString() {
-		return super.toString(type.toString()) + "(" + req + ")";
+		return super.toString(type.toString());
 	}
-
-//	public static class IntroSequenceID implements Serializable {
-//
-//		private static final long serialVersionUID = 1L;
-//		private final InetAddress dst;
-//		private final InetAddress src;
-//		private final long l;
-//
-//		public IntroSequenceID(InetAddress dst, InetAddress src) {
-//			l = INDEX.getAndIncrement();
-//			this.dst = dst;
-//			this.src = src;
-//		}
-//
-//		@Override
-//		public int hashCode() {
-//			return Long.hashCode(l) + dst.hashCode() + src.hashCode();
-//		}
-//
-//		@Override
-//		public boolean equals(Object o) {
-//			if (!(o instanceof IntroSequenceID)) {
-//				return false;
-//			}
-//			IntroSequenceID uid = (IntroSequenceID)o;
-//			return l == uid.l && dst.equals(uid.dst) && src.equals(uid.src);
-//		}
-//
-//		@Override
-//		public String toString() {
-//			return "UUID:" + dst + "<==" + src + "(" + l + ")";
-//		}
-//	}
 
 }

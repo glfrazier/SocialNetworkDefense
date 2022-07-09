@@ -1,6 +1,7 @@
 package com.github.glfrazier.snd.simulation;
 
 import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Random;
@@ -8,8 +9,10 @@ import java.util.logging.Logger;
 
 import com.github.glfrazier.snd.node.Feedback;
 import com.github.glfrazier.snd.node.MessageReceiver;
+import com.github.glfrazier.snd.protocol.message.AckMessage;
 import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
+import com.github.glfrazier.snd.simulation.TrafficGenerator.MessageContent;
 import com.github.glfrazier.snd.util.VPN;
 
 public class TrafficReceiver implements MessageReceiver {
@@ -23,7 +26,7 @@ public class TrafficReceiver implements MessageReceiver {
 	private Simulation sim;
 	private Random random = new Random();
 
-	private SimVPNImpl vpnToProxy;
+	private VPN vpnToProxy;
 	private InetAddress address;
 	private Statistics stats;
 
@@ -42,8 +45,13 @@ public class TrafficReceiver implements MessageReceiver {
 
 	@Override
 	public void receive(Message m) {
+		if (m instanceof AckMessage) {
+			// ignore acks!
+			return;
+		}
 		Message response = null;
-		if (TrafficGenerator.ATTACK_CONTENT.equals(m.getContent())) {
+		MessageContent content = (MessageContent)m.getContent();
+		if (content.isAttack) {
 			stats.badMessageReceived();
 			if (random.nextFloat() > falseNegativeRate) {
 				// It was an attack and we detected the attack
@@ -57,11 +65,7 @@ public class TrafficReceiver implements MessageReceiver {
 			}
 		}
 		if (response == null) {
-			if (TrafficGenerator.ATTACK_CONTENT.equals(m.getContent())) {
-				response = new Message(m.getSrc(), getAddress(), RESPONSE_TO_BAD_MESSAGE);
-			} else {
-				response = new Message(m.getSrc(), getAddress(), RESPONSE_TO_GOOD_MESSAGE);
-			}
+				response = new Message(m.getSrc(), getAddress(), new MessageContent(content));
 		}
 		if (sim.verbose) {
 			sim.printEvent(this + " received " + m + " and is responding with " + response);
@@ -79,17 +83,20 @@ public class TrafficReceiver implements MessageReceiver {
 		return "TrafficReceiver<" + addrToString(address) + ">";
 	}
 
-	public void attachToServer(SimVPNImpl vpn) {
+	public void attachToServer(VPN vpn) {
 		this.vpnToProxy = vpn;
 	}
 
 	@Override
 	public void vpnClosed(VPN vpn) {
-		System.err.println(this + ": why did this happen?");
+		new Exception(this + ": the VPN should never be closed!").printStackTrace();
+		System.exit(-1);
 	}
 
 	@Override
-	public Logger getLogger() {
-		return LOGGER;
+	public void vpnOpened(VPN vpn) {
+		// TODO Auto-generated method stub
+		
 	}
+
 }

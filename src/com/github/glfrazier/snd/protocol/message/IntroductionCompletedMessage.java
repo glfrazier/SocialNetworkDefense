@@ -9,7 +9,7 @@ import java.net.InetAddress;
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 
-public class IntroductionCompletedMessage extends SNDMessage implements Serializable, Event {
+public class IntroductionCompletedMessage extends IntroductionMessage implements Serializable, Event {
 
 	public static final IntroductionCompletedMessage SAMPLE_INTRODUCTION_SUCCESS = //
 			new IntroductionCompletedMessage(SAMPLE_INTRODUCTION_REQUEST, null);

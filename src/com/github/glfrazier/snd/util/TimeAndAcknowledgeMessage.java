@@ -1,7 +1,7 @@
 package com.github.glfrazier.snd.util;
 
 import com.github.glfrazier.snd.protocol.message.AcknowledgeMessage;
-import com.github.glfrazier.snd.protocol.message.SNDMessage;
+import com.github.glfrazier.snd.protocol.message.IntroductionMessage;
 
 /**
  * A struct to hold a time value (long) with an SNDMessage.

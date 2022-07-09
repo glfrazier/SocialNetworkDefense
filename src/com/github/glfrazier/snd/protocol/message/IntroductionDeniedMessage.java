@@ -5,7 +5,7 @@ import static com.github.glfrazier.snd.protocol.IntroductionRequest.SAMPLE_INTRO
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 
-public class IntroductionDeniedMessage extends SNDMessage implements Serializable, Event {
+public class IntroductionDeniedMessage extends IntroductionMessage implements Serializable, Event {
 
 	/**
 	 * 

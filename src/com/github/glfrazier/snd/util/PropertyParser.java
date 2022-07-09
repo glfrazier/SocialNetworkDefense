@@ -124,4 +124,22 @@ public class PropertyParser {
 		return prob;
 	}
 
+	public static long getLongProperty(String propName, Properties properties) {
+		String lStr = properties.getProperty(propName);
+		if (lStr == null) {
+			System.err.println("'" + propName + "' was not specified in the provided properties; it is required.");
+			System.exit(-1);
+		}
+		try {
+			long l = Long.parseLong(lStr);
+			return l;
+		} catch (NumberFormatException e) {
+			System.err
+					.println("The value for the property '" + propName + "' is not a long integer---it is " + lStr);
+			System.exit(-1);
+		}
+		// unreachable code
+		return 0;
+	}
+
 }

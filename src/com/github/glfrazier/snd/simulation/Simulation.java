@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -18,6 +17,7 @@ import com.github.glfrazier.snd.node.ClientProxy;
 import com.github.glfrazier.snd.node.SNDNode;
 import com.github.glfrazier.snd.node.ServerProxy;
 import com.github.glfrazier.snd.util.PropertyParser;
+import com.github.glfrazier.snd.util.VPN;
 
 public class Simulation {
 
@@ -43,7 +43,7 @@ public class Simulation {
 			// eventingSystem.setVerbose(true);
 			properties.setProperty("snd.node.verbose", "true");
 		}
-		
+
 		// load the properties
 		Properties sysProps = new Properties();
 		for (Object key : System.getProperties().keySet()) {
@@ -70,9 +70,11 @@ public class Simulation {
 			addPropertiesIfNotAlreadyThere(properties, newProps);
 		}
 		simRandom = new Random();
-		if (properties.containsKey("snd.sim.seed")) {
-			simRandom.setSeed(getLongProperty("snd.sim.seed"));
+		if (!properties.containsKey("snd.sim.seed")) {
+			long seed = System.currentTimeMillis();
+			properties.setProperty("snd.sim.seed", Long.toString(seed));
 		}
+		simRandom.setSeed(getLongProperty("snd.sim.seed"));
 
 		attackProb = getProbabilityProperty("snd.sim.attack_probability");
 
@@ -91,7 +93,6 @@ public class Simulation {
 		int rowsOfIntroducers = getIntegerProperty("snd.sim.number_of_introducer_rows");
 		int colsOfIntroducers = getIntegerProperty("snd.sim.number_of_introducer_cols");
 		if (true) {
-			int cacheSize = getIntegerProperty("snd.discover_service.cache_size");
 			int fanout = getIntegerProperty("snd.sim.introducer_fanout");
 			InetAddress baseAddress = InetAddress.getByName(DEFAULT_BASE_ADDRESS);
 			baseAddress = getIPAddressProperty("snd.sim.network_base_address", baseAddress.toString().substring(1));
@@ -116,8 +117,8 @@ public class Simulation {
 					SNDNode ij = introducers.get(j);
 					if (topology.areConnected(ii.getAddress(), ij.getAddress())) {
 						try {
-							ii.getImplementation().getComms().openVPN(ij.getAddress(), null);
-							ij.getImplementation().getComms().openVPN(ii.getAddress(), null);
+							ii.router.openLink(ij.getAddress(), null);
+							ij.router.openLink(ii.getAddress(), null);
 						} catch (IOException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
@@ -146,7 +147,7 @@ public class Simulation {
 				SNDNode introImpl = introducerMap.get(introAddr);
 				try {
 					serverProxy.connectFinalIntroducer(introAddr);
-					introImpl.getImplementation().getComms().openVPN(serverAddress, null);
+					introImpl.router.openLink(serverAddress, null);
 				} catch (IOException e) {
 					e.printStackTrace();
 					System.exit(-1);
@@ -182,7 +183,7 @@ public class Simulation {
 				SNDNode introImpl = introducerMap.get(introAddr);
 				try {
 					clientProxy.connectInitialIntroducer(introAddr);
-					introImpl.getImplementation().getComms().openVPN(clientAddress, null);
+					introImpl.router.openLink(clientAddress, null);
 				} catch (IOException e) {
 					e.printStackTrace();
 					System.exit(-1);
@@ -209,12 +210,11 @@ public class Simulation {
 		InetAddress receiverAddress = firstReceiverAddress;
 		appServers = new TrafficReceiver[servers.size()];
 		int index = 0;
+		SimVPNFactory factory = new SimVPNFactory(eventingSystem);
 		for (ServerProxy s : servers) {
 			TrafficReceiver receiver = new TrafficReceiver(receiverAddress, falsePositive, falseNegative, this);
 			appServers[index++] = receiver;
-			SimVPNFactory factory = new SimVPNFactory(eventingSystem);
-			factory.initialize(receiver);
-			SimVPNImpl vpn = (SimVPNImpl) factory.createVPN(s.getAddress(), null);
+			VPN vpn = factory.createVPN(receiver, s.getAddress(), null);
 			receiver.attachToServer(vpn);
 			s.connectAppServer(receiverAddress);
 			lastReceiverAddress = receiverAddress;
@@ -233,9 +233,7 @@ public class Simulation {
 		index = 0;
 		for (ClientProxy proxy : clients) {
 			TrafficGenerator generator = new TrafficGenerator(generatorAddress, this, eventingSystem);
-			SimVPNFactory factory = new SimVPNFactory(eventingSystem);
-			factory.initialize(generator);
-			SimVPNImpl vpn = (SimVPNImpl) factory.createVPN(proxy.getAddress(), null);
+			VPN vpn = factory.createVPN(generator, proxy.getAddress(), null);
 			generator.attachToProxy(vpn);
 			proxy.connectAppClient(generatorAddress);
 			appClients[index++] = generator;
@@ -301,7 +299,7 @@ public class Simulation {
 	}
 
 	public long getLongProperty(String propName) {
-		return (long) PropertyParser.getIntegerProperty(propName, properties);
+		return PropertyParser.getLongProperty(propName, properties);
 	}
 
 	/**

@@ -1,16 +1,18 @@
 package com.github.glfrazier.snd.simulation;
 
 import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
+
 import java.io.IOException;
+import java.io.Serializable;
 import java.net.InetAddress;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.MessageReceiver;
-import com.github.glfrazier.snd.node.SNDNode;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.VPN;
 
@@ -28,7 +30,7 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 	public static final String ATTACK_CONTENT = "Attack Content";
 
 	private InetAddress address;
-	private SimVPNImpl vpnToClient;
+	private VPN vpnToClient;
 	private float exponentialRate;
 
 	private Random random;
@@ -50,7 +52,7 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		es.scheduleEventRelative(this, WAKEUP_EVENT, getDelayToNextEvent());
 	}
 
-	public void attachToProxy(SimVPNImpl vpn) {
+	public void attachToProxy(VPN vpn) {
 		this.vpnToClient = vpn;
 	}
 
@@ -60,6 +62,9 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		long delta = (long) (1000 * x);
 //		System.out.println("exponentialRate=" + exponentialRate + ", u=" + u + ", x=" + x + ", delta=" + delta);
 //		new Exception().printStackTrace(System.out);
+
+		// minimum delay of 10 time units
+		delta += 10;
 		return delta;
 	}
 
@@ -74,7 +79,13 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 			System.err.println("Why did " + this + " receive " + m + "!?");
 			System.exit(-1);
 		}
-		if (TrafficReceiver.RESPONSE_TO_BAD_MESSAGE.equals(m.getContent())) {
+		Serializable c = m.getContent();
+		if (c == null || !(c instanceof MessageContent)) {
+			LOGGER.warning(this + ": received a message with weird content: " + c);
+			return;
+		}
+		MessageContent content = (MessageContent) c;
+		if (content.isAttack) {
 			stats.responseToBadMessageReceived();
 		} else {
 			stats.responseToGoodMessageReceived();
@@ -96,12 +107,10 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		// choose a destination
 		Simulation.MessageMetaData mmd = sim.getNextMessageToSend(this);
 
-		String content = null;
-		if (mmd.isAttack) {
-			content = ATTACK_CONTENT;
+		MessageContent content = new MessageContent(mmd.isAttack);
+		if (content.isAttack) {
 			stats.badMessageSent();
 		} else {
-			content = BENIGN_CONTENT;
 			stats.goodMessageSent();
 		}
 
@@ -132,11 +141,6 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		return "TrafficGenerator<" + addrToString(address) + ">";
 	}
 
-	@Override
-	public void vpnClosed(VPN vpn) {
-		System.err.println(this + ": why did this happen?");
-	}
-
 	public boolean isAttacker() {
 		return isAttacker;
 	}
@@ -146,8 +150,38 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 	}
 
 	@Override
-	public Logger getLogger() {
-		return LOGGER;
+	public void vpnClosed(VPN vpn) {
+		new Exception(this + ": the VPN should never be closed!").printStackTrace();
+		System.exit(-1);
+	}
+
+	public static class MessageContent implements Serializable {
+		private static final AtomicLong ID_GEN = new AtomicLong(0);
+		public final boolean isResponse;
+		public final boolean isAttack;
+		public final long identifier;
+
+		public MessageContent(boolean isAttack) {
+			this.isResponse = false;
+			this.isAttack = isAttack;
+			this.identifier = ID_GEN.getAndIncrement();
+		}
+
+		public MessageContent(MessageContent m) {
+			isResponse = true;
+			isAttack = m.isAttack;
+			identifier = m.identifier;
+		}
+
+		public String toString() {
+			return (isResponse ? "Response to " : "") + "App Msg " + identifier + (isAttack ? "(ATTACK)" : "(BENIGN)");
+		}
+	}
+
+	@Override
+	public void vpnOpened(VPN vpn) {
+		// TODO Auto-generated method stub
+		
 	}
 
 }

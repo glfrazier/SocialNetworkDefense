@@ -92,7 +92,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 			InetAddress newNeighbor = rp.getResultingNeighbor();
 			try {
 				if (priorIntroduction != null) {
-					requester.getImplementation().getComms().closeIntroducedVPN(rp.getIntroducer(), priorIntroduction);
+					requester.router.closeIntroducedVPN(rp.getIntroducer(), priorIntroduction);
 				}
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -100,12 +100,12 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 			}
 			if (newNeighbor.equals(message.getDst())) {
 				try {
-					requester.getImplementation().getComms().send(message);
+					requester.router.send(message);
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-				requester.addIntroductionToDestionation(message.getDst(), message.getSrc(),
+				requester.addIntroductionToDestination(message.getDst(), message.getSrc(),
 						rp.getIntroductionRequest());
 				this.receive(CONNECTED);
 			} else {
@@ -117,14 +117,14 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 			return;
 		} // else
 		if (rp.routeIsAvailable()) {
-			requester.getImplementation().getComms().addRoute(message.getDst(), rp.getIntroductionRequest().introducer);
+			requester.router.addRoute(message.getDst(), rp.getIntroductionRequest().introducer);
 			try {
-				requester.getImplementation().getComms().send(message);
+				requester.router.send(message);
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			requester.addIntroductionToDestionation(message.getDst(), message.getSrc(), rp.getIntroductionRequest());
+			requester.addIntroductionToDestination(message.getDst(), message.getSrc(), rp.getIntroductionRequest());
 			this.receive(CONNECTED);
 			return;
 		}

@@ -1,6 +1,7 @@
 package com.github.glfrazier.snd.node;
 
 import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
+import static java.util.logging.Level.FINEST;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -12,10 +13,11 @@ import java.util.Properties;
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
-import com.github.glfrazier.snd.protocol.message.Ack;
+import com.github.glfrazier.snd.protocol.message.AckMessage;
 import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedWillRouteMessage;
+import com.github.glfrazier.snd.protocol.message.IntroductionOfferMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.WrappedMessage;
@@ -27,20 +29,22 @@ public class ServerProxy extends SNDNode {
 	private InetAddress proxiedAppServer;
 	private InetAddress finalIntroducer;
 	private Map<InetAddress, TimeAndIntroductionRequest> mostRecentIntroductionRequestForSrc;
+	private Map<InetAddress, TimeAndIntroductionRequest> mostRecentIntroductionOfferForSrc;
 
 	public ServerProxy(InetAddress addr, Implementation impl, EventingSystem es, Properties props) {
 		super(addr, impl, es, props);
 		mostRecentIntroductionRequestForSrc = new LinkedHashMap<>();
+		mostRecentIntroductionOfferForSrc = new LinkedHashMap<>();
 	}
 
 	public void connectAppServer(InetAddress app) throws IOException {
 		// Note that we are not using the ImplBase class' VPN management logic for the
 		// vpn to the user/app.
 		if (proxiedAppServer != null) {
-			implementation.getComms().closeVPN(proxiedAppServer);
+			router.closeLink(proxiedAppServer);
 			proxiedAppServer = null;
 		}
-		implementation.getComms().openVPN(app, null);
+		router.openLink(app, null);
 		proxiedAppServer = app;
 	}
 
@@ -55,11 +59,11 @@ public class ServerProxy extends SNDNode {
 	 */
 	public void connectFinalIntroducer(InetAddress introducer) throws IOException {
 		if (finalIntroducer != null) {
-			implementation.getComms().closeVPN(finalIntroducer);
+			router.closeLink(finalIntroducer);
 			finalIntroducer = null;
 		}
 		this.finalIntroducer = introducer;
-		implementation.getComms().openVPN(introducer, null);
+		router.openLink(introducer, null);
 		finalIntroducer = introducer;
 	}
 
@@ -71,7 +75,7 @@ public class ServerProxy extends SNDNode {
 			// request arrived on). So, we can just deny the introduction request with a
 			// response that we will route to the server.
 			try {
-				implementation.getComms().send(new IntroductionDeniedWillRouteMessage(m.getIntroductionRequest()));
+				router.send(new IntroductionDeniedWillRouteMessage(m.getIntroductionRequest()));
 			} catch (IOException e) {
 				// ignore the failure
 			}
@@ -79,12 +83,23 @@ public class ServerProxy extends SNDNode {
 			// The server proxy does not perform introductions!
 			try {
 				System.err.println(this + " received unexpected introduction request: " + m);
-				implementation.getComms().send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
+				router.send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
+	}
+
+	@Override
+	protected boolean processIntroductionOffer(IntroductionOfferMessage m) {
+		boolean result = super.processIntroductionOffer(m);
+		if (result) {
+			IntroductionRequest ir = m.getIntroductionRequest();
+			mostRecentIntroductionOfferForSrc.put(ir.requester,
+					new TimeAndIntroductionRequest(eventingSystem.getCurrentTime(), ir));
+		}
+		return result;
 	}
 
 	@Override
@@ -96,13 +111,15 @@ public class ServerProxy extends SNDNode {
 				logger.severe(this + ": Why did we receive " + m + "?");
 				return;
 			}
-			implementation.getComms().addRoute(enclosed.getSrc(), wrapper.getSrc());
+			router.addRoute(enclosed.getSrc(), wrapper.getSrc());
 			try {
-				IntroductionRequest ir = implementation.getComms().getIntroductionRequestForNeighbor( //
+				IntroductionRequest ir = router.getIntroductionRequestForNeighbor( //
 						wrapper.getSrc(), // The neighbor for which we want the introduction request that connected us
-						wrapper.getSrc(), // The node that was the requester
-						enclosed.getDst() // The destination they were attempting to reach
+						enclosed.getDst() // The destination the introduction was attempting to reach
 				);
+				if (logger.isLoggable(FINEST)) {
+					logger.finest(this + ": we were introduced to " + wrapper.getSrc() + " via " + ir);
+				}
 				mostRecentIntroductionRequestForSrc.put(enclosed.getSrc(),
 						new TimeAndIntroductionRequest(eventingSystem.getCurrentTime(), ir));
 			} catch (IOException e) {
@@ -122,7 +139,7 @@ public class ServerProxy extends SNDNode {
 		// The comms.send() method will automagically wrap and forward messages from the
 		// AppServer.
 		try {
-			implementation.getComms().send(m);
+			router.send(m);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -136,12 +153,14 @@ public class ServerProxy extends SNDNode {
 	 * all up and send the feedback to its "final" introducer.
 	 */
 	protected void processFeedback(FeedbackMessage m) {
+		// First, send an acknowledgement, and ignore whether or not it worked.
 		try {
-			getImplementation().getComms().send(new Ack(m.getSrc(), getAddress()));
+			router.send(new AckMessage(m.getSrc(), getAddress()));
 		} catch (IOException e) {
 			// Ignore a failed ack.
 			e.printStackTrace();
 		}
+		// Second, verify that we were supposed to receive this feedback
 		if (!m.getSrc().equals(proxiedAppServer)) {
 			new Exception(this + " should only receive feedback messages from " + proxiedAppServer + "! : " + m)
 					.printStackTrace();
@@ -156,17 +175,27 @@ public class ServerProxy extends SNDNode {
 				System.exit(-1);
 			}
 		}
-		InetAddress src = m.getSubject();
+		InetAddress subject = m.getSubject();
 		// InetAddress requester = implementation.getComms().getRouteTo(src);
-		TimeAndIntroductionRequest tNreq = mostRecentIntroductionRequestForSrc.remove(src);
+		TimeAndIntroductionRequest tNreq = mostRecentIntroductionRequestForSrc.remove(subject);
 		if (tNreq == null) {
 			logger.warning(
 					this + " Received a feedback message about a connection that has expired or never was: " + m);
 			return;
 		}
-		FeedbackMessage fm = new FeedbackMessage(tNreq.ir, getAddress(), src, m.getFeedback());
+		TimeAndIntroductionRequest tr2 = mostRecentIntroductionOfferForSrc.remove(tNreq.ir.requester);
+		if (tr2 == null) {
+			logger.warning(
+					this + " tr2 is null!");
+			return;
+		}
+		if (logger.isLoggable(FINEST)) {
+			logger.finest(this + ": forwarding feedback. subject=" + subject + ", IR=" + tr2.ir);
+		}
+		FeedbackMessage fm = new FeedbackMessage(tr2.ir, getAddress(), subject, m.getFeedback());
 		try {
-			implementation.getComms().send(fm);
+			System.out.println(this + ": sending feedback " + fm);
+			router.send(fm);
 		} catch (IOException e) {
 			logger.severe("Failed transmission: " + e);
 		}
@@ -189,6 +218,18 @@ public class ServerProxy extends SNDNode {
 						while (iter.hasNext()) {
 							InetAddress src = iter.next();
 							TimeAndIntroductionRequest tNir = mostRecentIntroductionRequestForSrc.get(src);
+							if (now - tNir.time < FEEDBACK_EXPIRATION_TIME) {
+								break;
+							}
+							iter.remove();
+						}
+					}
+					synchronized (mostRecentIntroductionOfferForSrc) {
+						long now = eventingSystem.getCurrentTime();
+						Iterator<InetAddress> iter = mostRecentIntroductionOfferForSrc.keySet().iterator();
+						while (iter.hasNext()) {
+							InetAddress src = iter.next();
+							TimeAndIntroductionRequest tNir = mostRecentIntroductionOfferForSrc.get(src);
 							if (now - tNir.time < FEEDBACK_EXPIRATION_TIME) {
 								break;
 							}

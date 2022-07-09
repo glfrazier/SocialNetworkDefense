@@ -12,7 +12,7 @@ import com.github.glfrazier.snd.protocol.Pedigree;
 /**
  * 
  */
-public class IntroductionOfferMessage extends SNDMessage implements Serializable, Event {
+public class IntroductionOfferMessage extends IntroductionMessage implements Serializable, Event {
 
 	/**
 	 * 
