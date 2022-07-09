@@ -256,7 +256,6 @@ public class SNDNode implements EventProcessor {
 	}
 
 	protected void processFeedback(FeedbackMessage m) {
-		System.out.println(this + ": processing " + m);
 		if (logger.isLoggable(FINE)) {
 			logger.fine(this + " received " + m);
 		}

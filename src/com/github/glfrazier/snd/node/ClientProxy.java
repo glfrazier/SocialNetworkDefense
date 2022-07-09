@@ -103,14 +103,12 @@ public class ClientProxy extends SNDNode // implements StateMachineTracker
 
 	@Override
 	protected void processFeedback(FeedbackMessage m) {
-		System.out.println(this + " processing " + m);
 		try {
 			router.send(new AckMessage(m.getSrc(), getAddress()));
 		} catch (IOException e1) {
 			// Ignore a failed ack.
 			e1.printStackTrace();
 		}
-		System.out.println(this + " received " + m);
 //		System.out.println("Eventually, we will want to make the client aware that negative feedback has\n"
 //				+ "been received. And, if we have multiple clients we are routing,\n"
 //				+ "we may want to do a mini-reputation system here.");
