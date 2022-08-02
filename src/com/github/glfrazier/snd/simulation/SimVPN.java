@@ -20,6 +20,14 @@ public class SimVPN implements EventProcessor {
 
 	private static final Logger LOGGER = Logger.getLogger(SimVPN.class.getName());
 
+	static final Event CLOSE_VPN_EVENT = new Event() {
+		private static final String NAME = "CLOSE_VPN_EVENT";
+
+		public String toString() {
+			return NAME;
+		}
+	};
+
 	private SimVPN remote;
 	private MessageReceiver local;
 	private EventingSystem eventingSystem;
@@ -34,7 +42,7 @@ public class SimVPN implements EventProcessor {
 		SimVPN prior = SimVPNManager.VPN_MAP.get(key);
 		if (prior != null) {
 			prior.close();
-			LOGGER.warning(this + ": being created when a duplicate already exists!");
+			LOGGER.severe(this + ": being created when a duplicate already exists!");
 //			new Exception(this + ": being created when a duplicate already exists!").printStackTrace();
 //			System.exit(-1);
 		}
@@ -63,23 +71,21 @@ public class SimVPN implements EventProcessor {
 		eventingSystem.scheduleEventRelative(remote, m, SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
 	}
 
-	public void close() {
+	private void close() {
 		if (closed) {
 			return;
 		}
 		if (LOGGER.isLoggable(FINE)) {
 			LOGGER.fine(this + ": being closed.");
 		}
-		SimVPN r = null;
 		synchronized (this) {
-			r = remote;
+			eventingSystem.scheduleEventRelative(remote, CLOSE_VPN_EVENT,
+					SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
 			SimVPNManager.VPN_MAP.remove(new AddressPair(local.getAddress(), remoteAddress));
 			closed = true;
 			remote = null;
 		}
-		if (r != null) {
-			r.close();
-		}
+		local.vpnClosed(remoteAddress);
 	}
 
 	@Override
@@ -89,6 +95,10 @@ public class SimVPN implements EventProcessor {
 				// Don't warn about ACKs
 				LOGGER.warning(this + ": discarding " + e + " because VPN is closed.");
 			}
+			return;
+		}
+		if (e.equals(CLOSE_VPN_EVENT)) {
+			close();
 			return;
 		}
 		local.receive((Message) e);

@@ -1,7 +1,7 @@
 package com.github.glfrazier.snd.protocol;
 
 import com.github.glfrazier.event.Event;
-import com.github.glfrazier.snd.node.SNDNode;
+import com.github.glfrazier.snd.node.Node;
 import com.github.glfrazier.snd.protocol.message.AddIntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionAcceptedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionCompletedMessage;
@@ -43,7 +43,7 @@ import com.github.glfrazier.statemachine.Transition;
  * @author Greg Frazier
  *
  */
-public class ReceiveOfferProtocol extends IntroductionProtocol {
+public class TargetProtocol extends IntroductionProtocol {
 
 	protected static final Event GOTO_REFUSE_STATE_EVENT = new Event() {
 		private static final String NAME = "goto sendRefuseState";
@@ -71,8 +71,8 @@ public class ReceiveOfferProtocol extends IntroductionProtocol {
 
 	private IntroductionOfferMessage introductionOffer;
 
-	public ReceiveOfferProtocol(SNDNode sndNode, IntroductionOfferMessage m, boolean verbose) {
-		super(sndNode, m.getIntroductionRequest(), "Receive Offer Protocol", verbose);
+	public TargetProtocol(Node target, IntroductionOfferMessage m, boolean verbose) {
+		super(target, m.getIntroductionRequest(), "Target Protocol", verbose);
 		this.introductionOffer = m;
 		setStartState(decideToAcceptState);
 		// decide to not accept the introduction
@@ -109,7 +109,7 @@ public class ReceiveOfferProtocol extends IntroductionProtocol {
 	private static Action decideToAcceptAction = new Action() {
 		@Override
 		public void act(StateMachine sm, State state, Event event) {
-			ReceiveOfferProtocol rop = (ReceiveOfferProtocol) sm;
+			TargetProtocol rop = (TargetProtocol) sm;
 			Pedigree p = rop.introductionOffer.getPedigree();
 			// validate correctness
 			if (!p.getSubject().equals(rop.introductionRequest.requester)) {
@@ -154,7 +154,7 @@ public class ReceiveOfferProtocol extends IntroductionProtocol {
 
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
-			ReceiveOfferProtocol rop = (ReceiveOfferProtocol) sm;
+			TargetProtocol rop = (TargetProtocol) sm;
 			Object keyingMaterial = rop.node.generateKeyingMaterial();
 			boolean success = rop.node.createVPN(rop.introductionRequest.requester, rop.introductionRequest,
 					keyingMaterial);
@@ -180,7 +180,7 @@ public class ReceiveOfferProtocol extends IntroductionProtocol {
 
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
-			ReceiveOfferProtocol rop = (ReceiveOfferProtocol) sm;
+			TargetProtocol rop = (TargetProtocol) sm;
 			rop.node.removeIntroductionRequestFromVPN(rop.introductionRequest, rop.introductionRequest.requester);
 			rop.receive(GOTO_TERMINAL_STATE);
 		}
@@ -197,7 +197,7 @@ public class ReceiveOfferProtocol extends IntroductionProtocol {
 
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
-			ReceiveOfferProtocol rop = (ReceiveOfferProtocol) sm;
+			TargetProtocol rop = (TargetProtocol) sm;
 			rop.node.send((IntroductionProtocol) null, new IntroductionCompletedMessage(rop.introductionRequest,
 					/* no keying material */ null, rop.introductionRequest.introducer));
 			rop.receive(GOTO_TERMINAL_STATE);
@@ -214,7 +214,7 @@ public class ReceiveOfferProtocol extends IntroductionProtocol {
 
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
-			ReceiveOfferProtocol rop = (ReceiveOfferProtocol) sm;
+			TargetProtocol rop = (TargetProtocol) sm;
 			rop.node.send((IntroductionProtocol) null,
 					new IntroductionRefusedMessage(rop.introductionRequest, rop.introductionRequest.introducer));
 			rop.receive(GOTO_TERMINAL_STATE);
@@ -232,7 +232,7 @@ public class ReceiveOfferProtocol extends IntroductionProtocol {
 
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
-			ReceiveOfferProtocol rop = (ReceiveOfferProtocol) sm;
+			TargetProtocol rop = (TargetProtocol) sm;
 			rop.node.unregisterProtocol(rop);
 		}
 

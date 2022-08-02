@@ -1,5 +1,6 @@
 package com.github.glfrazier.snd.util;
 
+import java.io.FileInputStream;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Properties;
@@ -141,5 +142,59 @@ public class PropertyParser {
 		// unreachable code
 		return 0;
 	}
+	
+
+	public static Properties parseCmdLine(String[] args, String prefix) {
+		Properties properties = new Properties();
+		for (int i = 0; i < args.length; i++) {
+			if (args[i].indexOf('=') < 0) {
+				System.err.println("Argument #" + i + " (" + args[i] + ") is not in the format <name>=<value>.");
+				System.exit(-1);
+			}
+			String name = args[i].substring(0, args[i].indexOf('='));
+			String value = "";
+			if (args[i].indexOf('=') < args[i].length() - 1) {
+				value = args[i].substring(args[i].indexOf('=') + 1);
+			}
+			properties.put(name, value);
+		}
+
+		// load the properties
+		Properties sysProps = new Properties();
+		for (Object key : System.getProperties().keySet()) {
+			String name = key.toString();
+			if (!name.startsWith(prefix + ".")) {
+				continue;
+			}
+			sysProps.put(name, System.getProperty(name));
+		}
+		addPropertiesIfNotAlreadyThere(properties, sysProps);
+		while (properties.containsKey(prefix + ".properties_file")) {
+			String filename = properties.remove(prefix + ".properties_file").toString();
+			System.out.println("Loading properties from " + filename);
+			Properties newProps = null;
+			try {
+				FileInputStream in = new FileInputStream(filename);
+				newProps = new Properties();
+				newProps.load(in);
+				in.close();
+			} catch (Exception e) {
+				System.err.println("Failure to load properties from file <" + filename + ">: " + e);
+				e.printStackTrace();
+			}
+			addPropertiesIfNotAlreadyThere(properties, newProps);
+		}
+		return properties;
+	}	
+
+	private static void addPropertiesIfNotAlreadyThere(Properties properties, Properties propertiesToAdd) {
+		for (Object key : propertiesToAdd.keySet()) {
+			String name = key.toString();
+			if (!properties.containsKey(name)) {
+				properties.put(name, propertiesToAdd.getProperty(name));
+			}
+		}
+	}
+
 
 }

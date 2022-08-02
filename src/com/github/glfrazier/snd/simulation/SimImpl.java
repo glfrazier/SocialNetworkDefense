@@ -1,6 +1,6 @@
 package com.github.glfrazier.snd.simulation;
 
-import com.github.glfrazier.snd.node.SNDNode;
+import com.github.glfrazier.snd.node.Node;
 import com.github.glfrazier.snd.util.CommsModule;
 import com.github.glfrazier.snd.util.DiscoveryService;
 import com.github.glfrazier.snd.util.Implementation;
@@ -12,14 +12,14 @@ public class SimImpl implements Implementation {
 	private ButterflyNetwork model;
 	private int cacheSize;
 	private SimVPNManager vpnManager;
-	private SNDNode node;
+	private Node node;
 	private SimComms comms;
 
 	public SimImpl(ButterflyNetwork topology) {
 		this.model = topology;
 	}
 
-	public void setNode(SNDNode node) {
+	public void setNode(Node node) {
 		this.node = node;
 		comms = new SimComms(node);
 		vpnManager = new SimVPNManager(node.getEventingSystem(), comms);

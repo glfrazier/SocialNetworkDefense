@@ -171,4 +171,10 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		}
 	}
 
+	@Override
+	public void vpnClosed(InetAddress nbr) {
+		// TODO Auto-generated method stub
+		
+	}
+
 }

@@ -18,12 +18,12 @@ import java.util.logging.Logger;
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
-import com.github.glfrazier.snd.protocol.InitiateRequestProtocol;
+import com.github.glfrazier.snd.protocol.RequesterProtocol;
 import com.github.glfrazier.snd.protocol.IntroductionProtocol;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.Pedigree;
-import com.github.glfrazier.snd.protocol.ReceiveOfferProtocol;
-import com.github.glfrazier.snd.protocol.ReceiveRequestProtocol;
+import com.github.glfrazier.snd.protocol.TargetProtocol;
+import com.github.glfrazier.snd.protocol.IntroducerProtocol;
 import com.github.glfrazier.snd.protocol.SNDPMessageTransmissionProtocol;
 import com.github.glfrazier.snd.protocol.message.AckMessage;
 import com.github.glfrazier.snd.protocol.message.AddIntroductionRequestMessage;
@@ -43,7 +43,7 @@ import com.github.glfrazier.statemachine.StateMachine;
  * A node in the Social Network Defense network. Implements the SND protocol for
  * establishing VPNs between trusted entities.
  */
-public class SNDNode implements EventProcessor, MessageReceiver {
+public class Node implements EventProcessor, MessageReceiver {
 
 	private final InetAddress address;
 
@@ -106,17 +106,20 @@ public class SNDNode implements EventProcessor, MessageReceiver {
 	 * The maximum time lapse between an introduction and feedback regarding that
 	 * introduction.
 	 */
+	// TODO These constants should all be set by properties!
 	protected static final long FEEDBACK_EXPIRATION_TIME = 8 * 60 * 60 * 1000; // eight hours (why?)
 	private static final long MAINTENANCE_INTERVAL = FEEDBACK_EXPIRATION_TIME / 100;
-	protected static final Logger LOGGER = Logger.getLogger(SNDNode.class.getName());
+	private static final int MAX_INTRODUCED_NEIGHBORS = 100; 
+	
+	protected static final Logger LOGGER = Logger.getLogger(Node.class.getName());
+
 	protected Logger logger;
 
-	private Map<Integer, SNDPMessageTransmissionProtocol> ackWaiters = Collections.synchronizedMap(new HashMap<>());
+	private Map<Long, SNDPMessageTransmissionProtocol> ackWaiters = Collections.synchronizedMap(new HashMap<>());
 
 	private Map<IntroductionRequest, StateMachine> registeredProtocols = Collections.synchronizedMap(new HashMap<>());
 
-	public SNDNode(InetAddress addr, Implementation implementation, EventingSystem eventingSystem,
-			Properties properties) {
+	public Node(InetAddress addr, Implementation implementation, EventingSystem eventingSystem, Properties properties) {
 		this.properties = properties;
 		if (properties == null || properties.isEmpty()) {
 			throw new NullPointerException("SNDNode requires properties!");
@@ -125,10 +128,10 @@ public class SNDNode implements EventProcessor, MessageReceiver {
 		this.eventingSystem = eventingSystem;
 		this.reputationModule = new ReputationModule(eventingSystem, this);
 		this.implementation = implementation;
-		
+
 		this.aprioriNeighbors = new HashSet<>();
-		this.introducedNeighbors = new HashMap<>();
-		
+		this.introducedNeighbors = new LinkedHashMap<>();
+
 		this.verbose = getBooleanProperty("snd.node.verbose", "false");
 
 		if (properties.containsKey("snd.sim." + addrToString(address) + ".verbose")) {
@@ -255,7 +258,7 @@ public class SNDNode implements EventProcessor, MessageReceiver {
 	 * @param m
 	 */
 	private void processAddIntroductionRequest(AddIntroductionRequestMessage m) {
-		InitiateRequestProtocol irp = (InitiateRequestProtocol) registeredProtocols.get(m.getIntroductionRequest());
+		RequesterProtocol irp = (RequesterProtocol) registeredProtocols.get(m.getIntroductionRequest());
 		if (irp == null) {
 			LOGGER.severe(this + ": invariant violation. Received " + m
 					+ ", but there is no InitiateRequestProtocol registered.");
@@ -273,19 +276,19 @@ public class SNDNode implements EventProcessor, MessageReceiver {
 	}
 
 	private void processIntroductionOffer(IntroductionOfferMessage m) {
-		ReceiveOfferProtocol protocol = new ReceiveOfferProtocol(this, m, verbose);
+		TargetProtocol protocol = new TargetProtocol(this, m, verbose);
 		registeredProtocols.put(m.getIntroductionRequest(), protocol);
 		protocol.begin();
 	}
 
 	protected void processIntroductionRequest(IntroductionRequestMessage m) {
-		ReceiveRequestProtocol protocol = new ReceiveRequestProtocol(this, m, verbose);
+		IntroducerProtocol protocol = new IntroducerProtocol(this, m, verbose);
 		registeredProtocols.put(m.getIntroductionRequest(), protocol);
 		protocol.begin();
 	}
 
 	private void processAck(AckMessage m) {
-		int id = m.getIdentifier();
+		long id = m.getIdentifier();
 		SNDPMessageTransmissionProtocol protocol = ackWaiters.remove(id);
 		if (protocol != null) {
 			protocol.receive(m);
@@ -474,10 +477,17 @@ public class SNDNode implements EventProcessor, MessageReceiver {
 			InetAddress nbr) {
 		Set<IntroductionRequest> requests = introducedNeighbors.get(nbr);
 		if (requests == null) {
-			return;
+			LOGGER.severe(this + ": Removing an introduction request from a non-existant VPN!");
+			System.exit(-1);
+		}
+		if (verbose) {
+			System.out.println(this + ": Removing IR " + introductionRequest + " from VPN to " + addrToString(nbr));
 		}
 		requests.remove(introductionRequest);
 		if (requests.isEmpty()) {
+			if (verbose) {
+				System.out.println(this + ": closing VPN to " + addrToString(nbr));
+			}
 			introducedNeighbors.remove(nbr);
 			implementation.getVPNManager().closeVPN(nbr);
 			implementation.getComms().removeRoutesVia(nbr);
@@ -518,17 +528,32 @@ public class SNDNode implements EventProcessor, MessageReceiver {
 		}
 		Set<IntroductionRequest> requests = introducedNeighbors.get(nbr);
 		if (requests != null) {
+			if (verbose) {
+				System.out.println(this + ": VPN to " + addrToString(nbr)+ " exists, adding " + introductionRequest);
+			}
 			requests.add(introductionRequest);
-			return true;
+		} else {
+			try {
+				implementation.getVPNManager().createVPN(nbr, keyingMaterial);
+			} catch (IOException e) {
+				return false;
+			}
+			requests = new HashSet<>();
+			requests.add(introductionRequest);
+			introducedNeighbors.put(nbr, requests);
+			if (verbose) {
+				System.out.println(this + ": created VPN to " + addrToString(nbr) + " with IR " + introductionRequest );
+			}
 		}
-		try {
-			implementation.getVPNManager().createVPN(nbr, keyingMaterial);
-		} catch (IOException e) {
-			return false;
+		while (introducedNeighbors.size() > MAX_INTRODUCED_NEIGHBORS) {
+			Iterator<InetAddress> iter = introducedNeighbors.keySet().iterator();
+			InetAddress n = iter.next();
+			Set<IntroductionRequest> reqs = new HashSet<>();
+			reqs.addAll(introducedNeighbors.get(n));
+			for(IntroductionRequest ir : reqs) {
+				removeIntroductionRequestFromVPN(ir, n);
+			}
 		}
-		requests = new HashSet<>();
-		requests.add(introductionRequest);
-		introducedNeighbors.put(nbr, requests);
 		return true;
 	}
 
@@ -545,8 +570,20 @@ public class SNDNode implements EventProcessor, MessageReceiver {
 		implementation.getComms().addRoute(dst, target);
 	}
 
-	public synchronized void unregisterAckWaiter(int id) {
+	public synchronized void unregisterAckWaiter(long id) {
 		ackWaiters.remove(id);
+	}
+
+	@Override
+	public synchronized void vpnClosed(InetAddress nbr) {
+		implementation.getComms().removeRoutesVia(nbr);
+		if (aprioriNeighbors.contains(nbr)) {
+			aprioriNeighbors.remove(nbr);
+			return;
+		}
+		if (introducedNeighbors.containsKey(nbr)) {
+			introducedNeighbors.remove(nbr);
+		}
 	}
 
 }

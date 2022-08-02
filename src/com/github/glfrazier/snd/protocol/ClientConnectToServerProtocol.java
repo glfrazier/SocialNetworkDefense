@@ -7,7 +7,7 @@ import java.net.InetAddress;
 
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.snd.node.ProxyNode;
-import com.github.glfrazier.snd.node.SNDNode;
+import com.github.glfrazier.snd.node.Node;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.DenialReporter;
 import com.github.glfrazier.statemachine.EventImpl;
@@ -17,7 +17,7 @@ import com.github.glfrazier.statemachine.Transition;
 
 /**
  * One start state ("Unconnected"), two end states ("Connected", "Failure"). In
- * Unconnected, the action is to kick off an {@link InitiateRequestProtocol}
+ * Unconnected, the action is to kick off an {@link RequesterProtocol}
  * toward the destination, via the current {@link #introducer}. If the
  * introduction succeeds, the old VPN is closed. If the new VPN is to the
  * message's destination we send the message and transition to Connected.
@@ -29,11 +29,11 @@ import com.github.glfrazier.statemachine.Transition;
  */
 public class ClientConnectToServerProtocol extends StateMachine implements StateMachine.StateMachineTracker {
 
-	private static final Event NEXT_STEP = new EventImpl<InitiateRequestProtocol>(null, "next_step");
-	private static final Event CONNECTED = new EventImpl<InitiateRequestProtocol>(null, "connected");
-	private static final Event FAILURE = new EventImpl<InitiateRequestProtocol>(null, "failure");
+	private static final Event NEXT_STEP = new EventImpl<RequesterProtocol>(null, "next_step");
+	private static final Event CONNECTED = new EventImpl<RequesterProtocol>(null, "connected");
+	private static final Event FAILURE = new EventImpl<RequesterProtocol>(null, "failure");
 	private final Message message;
-	private final SNDNode requester;
+	private final Node requester;
 	private InetAddress introducer;
 	private final InetAddress target;
 
@@ -69,7 +69,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 
 	@Override
 	public void stateMachineEnded(StateMachine machine) {
-		InitiateRequestProtocol irProtocol = (InitiateRequestProtocol) machine;
+		RequesterProtocol irProtocol = (RequesterProtocol) machine;
 		if (irProtocol.introductionSucceeded()) {
 			InetAddress newNeighbor = irProtocol.getResultingNeighbor();
 			// Remove the prior introduction from the link used in the prior introduction. Note that this has no impact on a-priori
@@ -103,7 +103,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 			ClientConnectToServerProtocol protocol = (ClientConnectToServerProtocol) sm;
 			IntroductionRequest request = new IntroductionRequest(protocol.requester.getAddress(), protocol.introducer,
 					protocol.target);
-			InitiateRequestProtocol intro = new InitiateRequestProtocol(protocol.requester, request, protocol.verbose);
+			RequesterProtocol intro = new RequesterProtocol(protocol.requester, request, protocol.verbose);
 			intro.registerCallback(protocol);
 			intro.begin();
 		}

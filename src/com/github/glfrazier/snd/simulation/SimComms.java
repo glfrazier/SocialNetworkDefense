@@ -14,7 +14,7 @@ import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.MessageReceiver;
-import com.github.glfrazier.snd.node.SNDNode;
+import com.github.glfrazier.snd.node.Node;
 import com.github.glfrazier.snd.protocol.message.IntroductionMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
@@ -23,13 +23,13 @@ import com.github.glfrazier.snd.util.CommsModule;
 public class SimComms implements CommsModule, MessageReceiver
 {
 
-	private SNDNode owner;
+	private Node owner;
 
 	private Map<InetAddress, InetAddress> routes;
 	private Map<InetAddress, Set<InetAddress>> routeTo;
 	private Map<InetAddress, SimVPN> vpnMap;
 
-	public SimComms(SNDNode owner) {
+	public SimComms(Node owner) {
 		this.owner = owner;
 		routes = new HashMap<>();
 		routeTo = new HashMap<>();
@@ -142,6 +142,11 @@ public class SimComms implements CommsModule, MessageReceiver
 	@Override
 	public InetAddress getAddress() {
 		return owner.getAddress();
+	}
+
+	@Override
+	public void vpnClosed(InetAddress nbr) {
+		owner.vpnClosed(nbr);
 	}
 
 }

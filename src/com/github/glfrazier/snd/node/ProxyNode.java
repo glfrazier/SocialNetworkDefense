@@ -11,7 +11,7 @@ import java.util.Properties;
 
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.protocol.ClientConnectToServerProtocol;
-import com.github.glfrazier.snd.protocol.InitiateRequestProtocol;
+import com.github.glfrazier.snd.protocol.RequesterProtocol;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
@@ -19,11 +19,11 @@ import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 import com.github.glfrazier.snd.util.DenialReporter;
 import com.github.glfrazier.snd.util.Implementation;
 
-public class ProxyNode extends SNDNode // implements StateMachineTracker
+public class ProxyNode extends Node
 {
 	private InetAddress proxiedHost;
 	private InetAddress initialIntroducer;
-	private Map<IntroductionRequest, InitiateRequestProtocol> introductionSequences = new HashMap<>();
+	private Map<IntroductionRequest, RequesterProtocol> introductionSequences = new HashMap<>();
 	private DenialReporter denialReporter;
 	private Map<AddressPair, IntroductionRequest> destinationIntroductionMap = Collections
 			.synchronizedMap(new HashMap<>());
@@ -134,7 +134,7 @@ public class ProxyNode extends SNDNode // implements StateMachineTracker
 		return "ProxyNode-" + addrToString(getAddress());
 	}
 
-	public void registerProtocol(InitiateRequestProtocol intro) {
+	public void registerProtocol(RequesterProtocol intro) {
 		introductionSequences.put(intro.getIntroductionRequest(), intro);
 	}
 

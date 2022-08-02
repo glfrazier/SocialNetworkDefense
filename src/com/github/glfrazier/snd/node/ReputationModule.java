@@ -41,7 +41,7 @@ public class ReputationModule {
 
 	private final String owner;
 
-	public ReputationModule(EventingSystem es, SNDNode node) {
+	public ReputationModule(EventingSystem es, Node node) {
 		this.eventingSystem = es;
 		this.userMap = Collections.synchronizedMap(new HashMap<>());
 		this.thresholdController = new ThresholdController(this, es, node);

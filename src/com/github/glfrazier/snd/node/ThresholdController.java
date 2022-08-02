@@ -44,7 +44,7 @@ public class ThresholdController implements EventProcessor {
 	private double actuatorError;
 	private long timeOfLastThresholdUpdate;
 
-	public ThresholdController(ReputationModule repModule, EventingSystem es, SNDNode owner) {
+	public ThresholdController(ReputationModule repModule, EventingSystem es, Node owner) {
 		this.reputationModule = repModule;
 		this.eventingSystem = es;
 		this.owner = owner.toString();

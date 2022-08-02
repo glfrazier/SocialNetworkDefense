@@ -3,7 +3,7 @@ package com.github.glfrazier.snd.protocol;
 import java.net.InetAddress;
 
 import com.github.glfrazier.event.Event;
-import com.github.glfrazier.snd.node.SNDNode;
+import com.github.glfrazier.snd.node.Node;
 import com.github.glfrazier.snd.protocol.message.IntroductionAcceptedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionCompletedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedMessage;
@@ -15,13 +15,13 @@ import com.github.glfrazier.statemachine.State.Action;
 import com.github.glfrazier.statemachine.StateMachine;
 import com.github.glfrazier.statemachine.Transition;
 
-public class ReceiveRequestProtocol extends IntroductionProtocol {
+public class IntroducerProtocol extends IntroductionProtocol {
 
-	private IntroductionRequestMessage introductionRequestMessage;
+	//private IntroductionRequestMessage introductionRequestMessage;
 
-	public ReceiveRequestProtocol(SNDNode sndNode, IntroductionRequestMessage m, boolean verbose) {
-		super(sndNode, m.getIntroductionRequest(), "Receive Request Protocol", verbose);
-		this.introductionRequestMessage = m;
+	public IntroducerProtocol(Node target, IntroductionRequestMessage m, boolean verbose) {
+		super(target, m.getIntroductionRequest(), "Introducer Protocol", verbose);
+		//this.introductionRequestMessage = m;
 
 		setStartState(decisionState);
 		addTransition(new Transition(decisionState, FAILURE_EVENT.getClass(), sendDeniedState));
@@ -37,7 +37,7 @@ public class ReceiveRequestProtocol extends IntroductionProtocol {
 
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
-			ReceiveRequestProtocol rrp = (ReceiveRequestProtocol) sm;
+			IntroducerProtocol rrp = (IntroducerProtocol) sm;
 			Pedigree p = rrp.node.getPedigree(rrp.introductionRequest.requester);
 			boolean sendOffer = rrp.node.evaluatePedigree(p);
 			if (sendOffer) {
@@ -54,7 +54,7 @@ public class ReceiveRequestProtocol extends IntroductionProtocol {
 
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
-			ReceiveRequestProtocol rrp = (ReceiveRequestProtocol) sm;
+			IntroducerProtocol rrp = (IntroducerProtocol) sm;
 			rrp.node.send(rrp, new IntroductionDeniedMessage(rrp.introductionRequest));
 		}
 
@@ -64,7 +64,7 @@ public class ReceiveRequestProtocol extends IntroductionProtocol {
 
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
-			ReceiveRequestProtocol rrp = (ReceiveRequestProtocol) sm;
+			IntroducerProtocol rrp = (IntroducerProtocol) sm;
 			IntroductionAcceptedMessage iaMsg = (IntroductionAcceptedMessage) e;
 			rrp.node.send(rrp, new IntroductionCompletedMessage(rrp.introductionRequest, iaMsg.getKeyingMaterial(),
 					iaMsg.getSrc()));
@@ -77,7 +77,7 @@ public class ReceiveRequestProtocol extends IntroductionProtocol {
 
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
-			ReceiveRequestProtocol rrp = (ReceiveRequestProtocol) sm;
+			IntroducerProtocol rrp = (IntroducerProtocol) sm;
 			rrp.node.unregisterProtocol(rrp);
 		}
 

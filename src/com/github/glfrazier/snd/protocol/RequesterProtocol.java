@@ -3,7 +3,7 @@ package com.github.glfrazier.snd.protocol;
 import java.net.InetAddress;
 
 import com.github.glfrazier.event.Event;
-import com.github.glfrazier.snd.node.SNDNode;
+import com.github.glfrazier.snd.node.Node;
 import com.github.glfrazier.snd.protocol.message.AddIntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionCompletedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionDeniedMessage;
@@ -34,12 +34,12 @@ import com.github.glfrazier.statemachine.Transition;
  * routeAvailableState.</dd>
  * </dl>
  */
-public class InitiateRequestProtocol extends IntroductionProtocol {
+public class RequesterProtocol extends IntroductionProtocol {
 
 	private InetAddress target;
 
-	public InitiateRequestProtocol(SNDNode requester, IntroductionRequest request, boolean verbose) {
-		super(requester, request, "Initiate Request Protocol", verbose);
+	public RequesterProtocol(Node requester, IntroductionRequest request, boolean verbose) {
+		super(requester, request, "Requester Protocol", verbose);
 		
 		setStartState(sendRequestState);
 		addTransition(new Transition(sendRequestState, FAILURE_EVENT.getClass(), failureState));
@@ -72,7 +72,7 @@ public class InitiateRequestProtocol extends IntroductionProtocol {
 	public static final Action introductionRequestAction = new State.Action() {
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
-			InitiateRequestProtocol irp = (InitiateRequestProtocol) sm;
+			RequesterProtocol irp = (RequesterProtocol) sm;
 			IntroductionRequestMessage req = new IntroductionRequestMessage(irp.introductionRequest);
 			irp.node.send(irp, req);
 		}
@@ -81,7 +81,7 @@ public class InitiateRequestProtocol extends IntroductionProtocol {
 	private static final Action introductionSuccessAction = new State.Action() {
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
-			InitiateRequestProtocol irp = (InitiateRequestProtocol) sm;
+			RequesterProtocol irp = (RequesterProtocol) sm;
 			Object keyingMaterial = null;
 			if (e instanceof IntroductionCompletedMessage) {
 				IntroductionCompletedMessage successMsg = (IntroductionCompletedMessage) e;
@@ -100,10 +100,10 @@ public class InitiateRequestProtocol extends IntroductionProtocol {
 	private static final Action introductionFailedAction = new Action() {
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
-			InitiateRequestProtocol irp = (InitiateRequestProtocol) sm;
+			RequesterProtocol irp = (RequesterProtocol) sm;
 			irp.node.unregisterProtocol(irp);
-			((InitiateRequestProtocol) sm).node.getLogger()
-					.warning(this + ": " + ((InitiateRequestProtocol) sm).introductionRequest + " DENIED");
+			((RequesterProtocol) sm).node.getLogger()
+					.warning(this + ": " + ((RequesterProtocol) sm).introductionRequest + " DENIED");
 		}
 	};
 

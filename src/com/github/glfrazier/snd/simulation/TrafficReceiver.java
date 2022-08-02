@@ -88,5 +88,11 @@ public class TrafficReceiver implements MessageReceiver {
 		this.vpnToProxy = vpn;
 	}
 
+	@Override
+	public void vpnClosed(InetAddress nbr) {
+		// TODO Auto-generated method stub
+		
+	}
+
 
 }

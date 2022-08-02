@@ -1,7 +1,7 @@
 package com.github.glfrazier.snd.protocol;
 
 import com.github.glfrazier.event.Event;
-import com.github.glfrazier.snd.node.SNDNode;
+import com.github.glfrazier.snd.node.Node;
 import com.github.glfrazier.snd.protocol.message.AckMessage;
 import com.github.glfrazier.snd.protocol.message.SNDPMessage;
 import com.github.glfrazier.statemachine.State;
@@ -32,7 +32,7 @@ import com.github.glfrazier.statemachine.Transition;
  */
 public class SNDPMessageTransmissionProtocol extends StateMachine {
 
-	private SNDNode node;
+	private Node node;
 	private SNDPMessage message;
 	private int attempts = 0;
 
@@ -42,7 +42,7 @@ public class SNDPMessageTransmissionProtocol extends StateMachine {
 	public static final int TRANSMISSION_LATENCY = 10;
 	private static final long ACK_TIMEOUT = 3 * TRANSMISSION_LATENCY;
 
-	public SNDPMessageTransmissionProtocol(SNDNode node, StateMachine protocol, SNDPMessage message, boolean verbose) {
+	public SNDPMessageTransmissionProtocol(Node node, StateMachine protocol, SNDPMessage message, boolean verbose) {
 		super("SMDP MTP(" + message + ")", EventEqualityMode.CLASS_EQUALS, node.getEventingSystem());
 		this.node = node;
 		this.superProtocol = protocol;

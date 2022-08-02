@@ -13,7 +13,7 @@ public abstract class SNDPMessage extends Message {
 	
 	private static final AtomicInteger INDEX = new AtomicInteger(0);
 
-	protected final int id;
+	protected final long id;
 	
 	protected MessageType type;
 
@@ -77,11 +77,11 @@ public abstract class SNDPMessage extends Message {
 
 	public SNDPMessage(InetAddress dst, InetAddress src, MessageType type) {
 		super(dst, src);
-		this.id = INDEX.getAndIncrement();
+		this.id = ((long)src.hashCode() << 32) + INDEX.getAndIncrement();
 		this.type = type;
 	}
 	
-	protected SNDPMessage(InetAddress dst, InetAddress src, int id, MessageType type) {
+	protected SNDPMessage(InetAddress dst, InetAddress src, long id, MessageType type) {
 		super(dst, src);
 		this.id = id;
 		this.type = type;
@@ -96,7 +96,7 @@ public abstract class SNDPMessage extends Message {
 		return super.toString(type.toString() + "." + id);
 	}
 
-	public final int getIdentifier() {
+	public final long getIdentifier() {
 		return id;
 	}
 

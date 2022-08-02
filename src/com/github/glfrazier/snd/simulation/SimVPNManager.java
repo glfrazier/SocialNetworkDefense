@@ -29,13 +29,15 @@ public class SimVPNManager implements VPNManager {
 		SimVPN vpn = new SimVPN(local, remote, eventingSystem);
 	}
 
-
 	@Override
 	public synchronized void closeVPN(InetAddress remote) {
 		SimVPN vpn = VPN_MAP.get(new AddressPair(local.getAddress(), remote));
-		if (vpn == null) return;
-		vpn.close();
+		if (vpn == null)
+			return;
+		// A node will close a VPN at the same time that an ACK is being sent. So, we
+		// delay the actual closing of the VPN by one time unit. This does not prevent a
+		// host from creating a new VPN to the same neighbor in the meantime.
+		eventingSystem.scheduleEventRelative(vpn, SimVPN.CLOSE_VPN_EVENT, 1);
 	}
-
 
 }

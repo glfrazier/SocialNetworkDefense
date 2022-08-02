@@ -14,7 +14,7 @@ import java.util.Random;
 
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.ProxyNode;
-import com.github.glfrazier.snd.node.SNDNode;
+import com.github.glfrazier.snd.node.Node;
 import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 import com.github.glfrazier.snd.util.PropertyParser;
 
@@ -42,32 +42,6 @@ public class Simulation {
 			// eventingSystem.setVerbose(true);
 			properties.setProperty("snd.node.verbose", "true");
 		}
-
-		// load the properties
-		Properties sysProps = new Properties();
-		for (Object key : System.getProperties().keySet()) {
-			String name = key.toString();
-			if (!name.startsWith("snd.")) {
-				continue;
-			}
-			sysProps.put(name, System.getProperty(name));
-		}
-		addPropertiesIfNotAlreadyThere(properties, sysProps);
-		while (properties.containsKey("snd.properties_file")) {
-			String filename = properties.remove("snd.properties_file").toString();
-			System.out.println("Loading properties from <" + filename + ">");
-			Properties newProps = null;
-			try {
-				FileInputStream in = new FileInputStream(filename);
-				newProps = new Properties();
-				newProps.load(in);
-				in.close();
-			} catch (Exception e) {
-				System.err.println("Failure to load properties from file <" + filename + ">: " + e);
-				e.printStackTrace();
-			}
-			addPropertiesIfNotAlreadyThere(properties, newProps);
-		}
 		simRandom = new Random();
 		if (!properties.containsKey("snd.sim.seed")) {
 			long seed = System.currentTimeMillis();
@@ -87,7 +61,7 @@ public class Simulation {
 		System.out.println("===========================================");
 
 		// build the introducer network
-		Map<InetAddress, SNDNode> introducerMap = new HashMap<>();
+		Map<InetAddress, Node> introducerMap = new HashMap<>();
 		ButterflyNetwork topology = null;
 		int rowsOfIntroducers = getIntegerProperty("snd.sim.number_of_introducer_rows");
 		int colsOfIntroducers = getIntegerProperty("snd.sim.number_of_introducer_cols");
@@ -96,12 +70,12 @@ public class Simulation {
 			InetAddress baseAddress = InetAddress.getByName(DEFAULT_BASE_ADDRESS);
 			baseAddress = getIPAddressProperty("snd.sim.network_base_address", baseAddress.toString().substring(1));
 			topology = new ButterflyNetwork(fanout, rowsOfIntroducers, colsOfIntroducers, baseAddress);
-			List<SNDNode> introducers = new ArrayList<>(rowsOfIntroducers * colsOfIntroducers);
+			List<Node> introducers = new ArrayList<>(rowsOfIntroducers * colsOfIntroducers);
 			for (int row = 0; row < rowsOfIntroducers; row++) {
 				for (int col = 0; col < colsOfIntroducers; col++) {
 					InetAddress address = topology.getAddressOfElement(row, col);
 					SimImpl impl = new SimImpl(topology);
-					SNDNode introducer = new SNDNode(address, impl, eventingSystem, properties);
+					Node introducer = new Node(address, impl, eventingSystem, properties);
 					impl.setNode(introducer);
 					introducers.add(introducer);
 					introducerMap.put(address, introducer);
@@ -112,8 +86,8 @@ public class Simulation {
 			}
 			for (int i = 0; i < introducers.size() - 1; i++) {
 				for (int j = i + 1; j < introducers.size(); j++) {
-					SNDNode ii = introducers.get(i);
-					SNDNode ij = introducers.get(j);
+					Node ii = introducers.get(i);
+					Node ij = introducers.get(j);
 					if (topology.areConnected(ii.getAddress(), ij.getAddress())) {
 						try {
 							Object keyingMaterial = ii.generateKeyingMaterial();
@@ -144,7 +118,7 @@ public class Simulation {
 				impl.setNode(serverProxy);
 				servers.add(serverProxy);
 				InetAddress introAddr = topology.getAddressOfElement(index, colsOfIntroducers - 1);
-				SNDNode introImpl = introducerMap.get(introAddr);
+				Node introImpl = introducerMap.get(introAddr);
 				try {
 					Object keyingMaterial = serverProxy.generateKeyingMaterial();
 					serverProxy.connectInitialIntroducer(introAddr, keyingMaterial);
@@ -181,7 +155,7 @@ public class Simulation {
 				impl.setNode(clientProxy);
 				clients.add(clientProxy);
 				InetAddress introAddr = topology.getAddressOfElement(index, 0);
-				SNDNode introImpl = introducerMap.get(introAddr);
+				Node introImpl = introducerMap.get(introAddr);
 				try {
 					Object keyingMaterial = clientProxy.generateKeyingMaterial();
 					clientProxy.connectInitialIntroducer(introAddr, keyingMaterial);
@@ -344,15 +318,6 @@ public class Simulation {
 		return PropertyParser.getProbabilityProperty(propName, properties);
 	}
 
-	private static void addPropertiesIfNotAlreadyThere(Properties properties, Properties propertiesToAdd) {
-		for (Object key : propertiesToAdd.keySet()) {
-			String name = key.toString();
-			if (!properties.containsKey(name)) {
-				properties.put(name, propertiesToAdd.getProperty(name));
-			}
-		}
-	}
-
 	/**
 	 * Run a simulation of the Socian Network Dynamics. Parameters are provided in
 	 * the format "&lt;name&gt;=&lt;value&gt;". Order of precedence:
@@ -369,20 +334,7 @@ public class Simulation {
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		Properties properties = new Properties();
-		for (int i = 0; i < args.length; i++) {
-			if (args[i].indexOf('=') < 0) {
-				System.err.println("Argument #" + i + " (" + args[i] + ") is not in the format <name>=<value>.");
-				System.exit(-1);
-			}
-			String name = args[i].substring(0, args[i].indexOf('='));
-			String value = "";
-			if (args[i].indexOf('=') < args[i].length() - 1) {
-				value = args[i].substring(args[i].indexOf('=') + 1);
-			}
-			properties.put(name, value);
-		}
-		System.out.println("Properties = " + properties);
+		Properties properties = PropertyParser.parseCmdLine(args, "snd");
 		Simulation sim = null;
 		try {
 			sim = new Simulation(properties);
