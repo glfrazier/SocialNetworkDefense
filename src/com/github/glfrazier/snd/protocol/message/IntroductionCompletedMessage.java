@@ -1,6 +1,5 @@
 package com.github.glfrazier.snd.protocol.message;
 
-import static com.github.glfrazier.snd.protocol.IntroductionRequest.SAMPLE_INTRODUCTION_REQUEST;
 import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 
 import java.io.Serializable;
@@ -11,14 +10,13 @@ import com.github.glfrazier.snd.protocol.IntroductionRequest;
 
 public class IntroductionCompletedMessage extends IntroductionMessage implements Serializable, Event {
 
-	public static final IntroductionCompletedMessage SAMPLE_INTRODUCTION_SUCCESS = //
-			new IntroductionCompletedMessage(SAMPLE_INTRODUCTION_REQUEST, null);
-
 	private static final long serialVersionUID = 1L;
-	private InetAddress nextStep;
+	private final InetAddress nextStep;
+	private final Object keyingMaterial;
 
-	public IntroductionCompletedMessage(IntroductionRequest req, InetAddress target) {
+	public IntroductionCompletedMessage(IntroductionRequest req, Object keyingMaterial, InetAddress target) {
 		super(req.requester, req.introducer, req, MessageType.INTRODUCTION_COMPLETED);
+		this.keyingMaterial = keyingMaterial;
 		this.nextStep = target;
 	}
 
@@ -27,7 +25,7 @@ public class IntroductionCompletedMessage extends IntroductionMessage implements
 	}
 
 	public Object getKeyingMaterial() {
-		return null;
+		return keyingMaterial;
 	}
 
 	public String toString() {

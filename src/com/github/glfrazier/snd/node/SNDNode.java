@@ -2,73 +2,95 @@ package com.github.glfrazier.snd.node;
 
 import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 import static java.util.logging.Level.FINE;
-import static java.util.logging.Level.FINEST;
 
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.logging.Logger;
 
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
+import com.github.glfrazier.snd.protocol.InitiateRequestProtocol;
+import com.github.glfrazier.snd.protocol.IntroductionProtocol;
 import com.github.glfrazier.snd.protocol.IntroductionRequest;
 import com.github.glfrazier.snd.protocol.Pedigree;
+import com.github.glfrazier.snd.protocol.ReceiveOfferProtocol;
+import com.github.glfrazier.snd.protocol.ReceiveRequestProtocol;
+import com.github.glfrazier.snd.protocol.SNDPMessageTransmissionProtocol;
 import com.github.glfrazier.snd.protocol.message.AckMessage;
+import com.github.glfrazier.snd.protocol.message.AddIntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
-import com.github.glfrazier.snd.protocol.message.IntroductionAcceptedMessage;
-import com.github.glfrazier.snd.protocol.message.IntroductionCompletedMessage;
-import com.github.glfrazier.snd.protocol.message.IntroductionDeniedMessage;
-import com.github.glfrazier.snd.protocol.message.IntroductionDeniedWillRouteMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionOfferMessage;
-import com.github.glfrazier.snd.protocol.message.IntroductionRefusedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.protocol.message.SNDPMessage;
-import com.github.glfrazier.snd.protocol.message.WrappedMessage;
-import com.github.glfrazier.snd.util.DiscoveryService;
+import com.github.glfrazier.snd.util.DiscoveryService.Query;
 import com.github.glfrazier.snd.util.Implementation;
 import com.github.glfrazier.snd.util.PropertyParser;
 import com.github.glfrazier.snd.util.TimeAndIntroductionRequest;
+import com.github.glfrazier.statemachine.StateMachine;
 
 /**
  * A node in the Social Network Defense network. Implements the SND protocol for
  * establishing VPNs between trusted entities.
  */
-public class SNDNode implements EventProcessor {
+public class SNDNode implements EventProcessor, MessageReceiver {
 
 	private final InetAddress address;
 
+	/**
+	 * How the nodes that have been introduced to this node got here.
+	 */
 	private final Map<InetAddress, Pedigree> pedigrees = new HashMap<>();
 
 	/**
-	 * The key set is the set of accepted offers that this node is waiting to send
-	 * feedback about. The value is the timestamp (in milliseconds) when the
-	 * introduction request was accepted. After a suitable timeout (24 hrs?), the
-	 * entry is discarded.
+	 * The keys of this map are the set of accepted offers that this node is waiting
+	 * to send feedback about. The value for each key is the timestamp (in
+	 * milliseconds) when the introduction request was accepted. After a suitable
+	 * timeout (24 hrs?), the entry is discarded.
 	 */
 	private Map<IntroductionRequest, Long> pendingFeedbacksToSend = Collections.synchronizedMap(new LinkedHashMap<>());
 
 	/**
-	 * The key set of this Map is the introduction requests that we have offered and
-	 * had accepted, but not yet received feedback about. The values are the
-	 * introduction requests by which we know the requester. If the requester is
-	 * known to this node via a long-lived VPN, then the value is null.
+	 * The keys of this Map are the introduction requests that we have offered and
+	 * had accepted, but not yet received feedback about. The values are a duple:
+	 * the introduction requests by which we know the requester and the timestamp of
+	 * the introduction. If the requester is known to this node via a long-lived
+	 * VPN, then the value is null. We use this map to figure out where to forward
+	 * feedback to (i.e., who introduced the subject of the feedback to us). The
+	 * timestamp is used to clean out old entries (see
+	 * {@link #FEEDBACK_EXPIRATION_TIME}).
 	 */
 	private Map<IntroductionRequest, TimeAndIntroductionRequest> pendingFeedbacksToReceive = Collections
 			.synchronizedMap(new HashMap<>());
 
-	public final Router router;
-	protected final ReputationModule reputationModule;
+	/**
+	 * The nodes to which this node has VPN connections that existed before any
+	 * introductions.
+	 */
+	private Set<InetAddress> aprioriNeighbors;
+
+	/**
+	 * The keys are the neighbors to which this node has been introduced. The value
+	 * for each key is the introduction requests that are "using" the link. When the
+	 * last IntroductionRequest has been removed from the set, the VPN can be
+	 * closed.
+	 */
+	private Map<InetAddress, Set<IntroductionRequest>> introducedNeighbors;
+
+	public final ReputationModule reputationModule;
 	protected final EventingSystem eventingSystem;
 	protected final Implementation implementation;
-	private final Properties properties;
+	protected final Properties properties;
 
 	protected boolean verbose;
 
@@ -89,6 +111,10 @@ public class SNDNode implements EventProcessor {
 	protected static final Logger LOGGER = Logger.getLogger(SNDNode.class.getName());
 	protected Logger logger;
 
+	private Map<Integer, SNDPMessageTransmissionProtocol> ackWaiters = Collections.synchronizedMap(new HashMap<>());
+
+	private Map<IntroductionRequest, StateMachine> registeredProtocols = Collections.synchronizedMap(new HashMap<>());
+
 	public SNDNode(InetAddress addr, Implementation implementation, EventingSystem eventingSystem,
 			Properties properties) {
 		this.properties = properties;
@@ -97,10 +123,14 @@ public class SNDNode implements EventProcessor {
 		}
 		this.address = addr;
 		this.eventingSystem = eventingSystem;
-		this.router = new Router(this);
 		this.reputationModule = new ReputationModule(eventingSystem, this);
 		this.implementation = implementation;
+		
+		this.aprioriNeighbors = new HashSet<>();
+		this.introducedNeighbors = new HashMap<>();
+		
 		this.verbose = getBooleanProperty("snd.node.verbose", "false");
+
 		if (properties.containsKey("snd.sim." + addrToString(address) + ".verbose")) {
 			this.verbose = this.verbose || getBooleanProperty("snd.sim." + addrToString(address) + ".verbose", "false");
 		}
@@ -145,9 +175,9 @@ public class SNDNode implements EventProcessor {
 	public synchronized Pedigree getPedigree(InetAddress client) {
 		Pedigree p = pedigrees.get(client);
 		if (p == null) {
-			if (router.isIntroducedNeighbor(client)) {
-				throw new IllegalArgumentException(this + " does not have a pedigree for neighbor " + client);
-			}
+//			if (router.isIntroducedNeighbor(client)) {
+//				throw new IllegalArgumentException(this + " does not have a pedigree for neighbor " + client);
+//			}
 			p = new Pedigree(client);
 			pedigrees.put(client, p);
 		}
@@ -174,27 +204,40 @@ public class SNDNode implements EventProcessor {
 			processMessage(m);
 			return;
 		}
-		IntroductionMessage msg = (IntroductionMessage) m;
-		switch (msg.getType()) {
+		if (m instanceof AckMessage) {
+			processAck((AckMessage) m);
+			return;
+		}
+		AckMessage ack = new AckMessage((IntroductionMessage) m);
+		try {
+			implementation.getComms().send(ack);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		IntroductionMessage im = (IntroductionMessage) m;
+		switch (im.getType()) {
+		case ACK:
+			break;
 		case INTRODUCTION_DENIED:
-			processIntroductionDenied((IntroductionDeniedMessage) m);
-			break;
-		case INTRODUCTION_DENIED_WILL_ROUTE:
-			processIntroductionDeniedWillRoute((IntroductionDeniedWillRouteMessage) m);
-			break;
 		case INTRODUCTION_COMPLETED:
-			processIntroductionCompleted((IntroductionCompletedMessage) m);
-			break;
+		case INTRODUCTION_ACCEPTED:
+		case INTRODUCTION_REFUSED:
+			StateMachine protocol = registeredProtocols.get(im.getIntroductionRequest());
+			if (protocol == null) {
+				LOGGER.severe(this + ": received " + im + " but there is no protocol for it.");
+				return;
+			}
+			protocol.receive(im);
+			return;
 		case INTRODUCTION_REQUEST:
 			processIntroductionRequest((IntroductionRequestMessage) m);
 			break;
 		case INTRODUCTION_OFFER:
 			processIntroductionOffer((IntroductionOfferMessage) m);
 			break;
-		case INTRODUCTION_ACCEPTED:
-		case INTRODUCTION_REFUSED:
-			processTargetResponse((IntroductionMessage) m);
-			break;
+		case ADD_INTRODUCTION_REQUEST:
+			processAddIntroductionRequest((AddIntroductionRequestMessage) m);
 		case FEEDBACK:
 			processFeedback((FeedbackMessage) m);
 			break;
@@ -204,25 +247,49 @@ public class SNDNode implements EventProcessor {
 		}
 	}
 
-	protected void processIntroductionCompleted(IntroductionCompletedMessage m) {
-		// ClientImpl overrides receive(). So, we should never encounter an Introduction
-		// Completed message here.
-		new Exception(this + ": This method should never be invoked!").printStackTrace();
-		System.exit(-1);
+	/**
+	 * AddIntroductionRequestMessages are processed in the Node (as opposed to in a
+	 * protocol) because it has to happen inside the node's receive(Message)
+	 * semaphore.
+	 * 
+	 * @param m
+	 */
+	private void processAddIntroductionRequest(AddIntroductionRequestMessage m) {
+		InitiateRequestProtocol irp = (InitiateRequestProtocol) registeredProtocols.get(m.getIntroductionRequest());
+		if (irp == null) {
+			LOGGER.severe(this + ": invariant violation. Received " + m
+					+ ", but there is no InitiateRequestProtocol registered.");
+			// For now, terminate
+			System.exit(-1);
+		}
+		if (!addIntroductionRequestToVPN(m.getIntroductionRequest(), m.getSrc())) {
+			LOGGER.severe(this + ": invariant violation. Received " + m
+					+ ", but addIntroductionRequestToVPN returned false.");
+			// For now, terminate
+			new Exception().printStackTrace();
+			System.exit(-1);
+		}
+		irp.receive(m);
 	}
 
-	protected void processIntroductionDenied(IntroductionDeniedMessage m) {
-		// ClientImpl overrides receive(). So, we should never encounter an Introduction
-		// Completed message here.
-		new Exception(this + ": This method should never be invoked!").printStackTrace();
-		System.exit(-1);
+	private void processIntroductionOffer(IntroductionOfferMessage m) {
+		ReceiveOfferProtocol protocol = new ReceiveOfferProtocol(this, m, verbose);
+		registeredProtocols.put(m.getIntroductionRequest(), protocol);
+		protocol.begin();
 	}
 
-	protected void processIntroductionDeniedWillRoute(IntroductionDeniedWillRouteMessage m) {
-		// ClientImpl overrides receive(). So, we should never encounter an Introduction
-		// Completed message here.
-		new Exception(this + ": This method should never be invoked!").printStackTrace();
-		System.exit(-1);
+	protected void processIntroductionRequest(IntroductionRequestMessage m) {
+		ReceiveRequestProtocol protocol = new ReceiveRequestProtocol(this, m, verbose);
+		registeredProtocols.put(m.getIntroductionRequest(), protocol);
+		protocol.begin();
+	}
+
+	private void processAck(AckMessage m) {
+		int id = m.getIdentifier();
+		SNDPMessageTransmissionProtocol protocol = ackWaiters.remove(id);
+		if (protocol != null) {
+			protocol.receive(m);
+		}
 	}
 
 	/**
@@ -231,39 +298,24 @@ public class SNDNode implements EventProcessor {
 	 * @param m the received message
 	 * 
 	 * @see #receive(Message)
-	 * @see ClientProxy#receive(Message)
+	 * @see ProxyNode#receive(Message)
 	 * @see ServerProxy#receive(Message)
 	 */
 	protected void processMessage(Message m) {
-		if (m instanceof WrappedMessage) {
-			WrappedMessage wrapper = (WrappedMessage) m;
-			Message enclosed = wrapper.getEnclosedMessage();
-			try {
-				// SNDMessages are never wrapped. We put this code here instead of in
-				// ClientProxy or ServerProxy because this should *always* be the correct thing
-				// to do with a wrapped message.
-				router.send(enclosed);
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			return;
-		}
 		// For now, you need to have subclassed SNDNode to support a node receiving (or
 		// sending!) application messages.
-		new Exception(this + ": received an unwrapped message: " + m + "  class=" + m.getClass()).printStackTrace();
+		new Exception(this + ": received a message: " + m + "  class=" + m.getClass()).printStackTrace();
 		System.exit(-1);
+	}
+
+	public boolean evaluatePedigree(Pedigree p) {
+		addPedigree(p);
+		return reputationModule.reputationIsGreaterThanThreshold(p, verbose);
 	}
 
 	protected void processFeedback(FeedbackMessage m) {
 		if (logger.isLoggable(FINE)) {
 			logger.fine(this + " received " + m);
-		}
-		try {
-			router.send(new AckMessage(m.getSrc(), getAddress()));
-		} catch (IOException e1) {
-			// Ignore a failed ack.
-			e1.printStackTrace();
 		}
 		IntroductionRequest introductionRequest = m.getIntroductionRequest();
 		logger.finest(this + ": the feedback regards " + introductionRequest);
@@ -299,16 +351,10 @@ public class SNDNode implements EventProcessor {
 						+ ", but there is no previous pedigree. Pedigree=" + pedigree).printStackTrace();
 				System.exit(-1);
 			}
-			try {
-				FeedbackMessage fm = new FeedbackMessage(previousIntroduction, getAddress(), m.getSubject(),
-						m.getFeedback());
-				// System.out.println(this + " sending (fwding) " + fm);
-				router.send(fm);
-			} catch (IOException e) {
-				logger.severe(this + ": Failed transmission: " + e);
-				new Exception(this + ": Failed transmission: " + e).printStackTrace();
-				System.exit(-1);
-			}
+			FeedbackMessage fm = new FeedbackMessage(previousIntroduction, getAddress(), m.getSubject(),
+					m.getFeedback());
+			// System.out.println(this + " sending (fwding) " + fm);
+			send(fm);
 		} else {
 			if (pedigree.getRequestSequence().length != 0) {
 				new Exception(
@@ -316,16 +362,9 @@ public class SNDNode implements EventProcessor {
 						.printStackTrace();
 				System.exit(-1);
 			}
-			if (!router.isIntroducedNeighbor(introductionRequest.requester)) {
+			if (aprioriNeighbors.contains(introductionRequest.requester)) {
 				// We are connected to the requester -- forward the feedback to them!
-				try {
-					router.send(new FeedbackMessage(introductionRequest.requester, getAddress(), m.getSubject(),
-							m.getFeedback()));
-				} catch (IOException e) {
-					logger.severe(this + ": Failed transmission: " + e);
-					new Exception(this + ": Failed transmission: " + e).printStackTrace();
-					System.exit(-1);
-				}
+				send(new FeedbackMessage(introductionRequest.requester, getAddress(), m.getSubject(), m.getFeedback()));
 			} else {
 				new Exception(this
 						+ ": Invariant Violation: there are no introducers, but the requester is not a long-lived neighbor. ir.requester="
@@ -335,135 +374,17 @@ public class SNDNode implements EventProcessor {
 		}
 	}
 
-	/**
-	 * 
-	 * @param m
-	 * @return true if the offer was accepted
-	 */
-	protected boolean processIntroductionOffer(IntroductionOfferMessage m) {
-		Pedigree p = m.getPedigree();
-		// System.out.println(this + " received " + m + " with pedigree " + p);
-		p = p.getNext(m.getIntroductionRequest());
-		// System.out.println("\tpedigree is now " + p);
-		addPedigree(p);
-		if (reputationModule.reputationIsGreaterThanThreshold(p, verbose)) {
-			LOGGER.finer(this + ": accepting " + m.getIntroductionRequest());
-			// If the client's reputation is above threshold, create a transaction-specific
-			// VPN to the client and send an Introduction Accepted message.
-			try {
-				router.openIntroducedLink(m.getIntroductionRequest().requester, m.getIntroductionRequest(),
-						m.getKeyingMaterial());
-				router.send(new IntroductionAcceptedMessage(m.getIntroductionRequest(), getAddress()));
-				// Add an entry to the pendingFeedbacksToSend, identifying the introducer as the
-				// node to send the feedback to
-				if (logger.isLoggable(FINEST)) {
-					logger.finest(this + ": recording " + m.getIntroductionRequest() + " in pendingFeedbacksToSend.");
-				}
-				pendingFeedbacksToSend.put(m.getIntroductionRequest(), eventingSystem.getCurrentTime());
-			} catch (IOException e) {
-				logger.severe("Failed to send message: " + e);
-			}
-			return true;
-		} else {
-			LOGGER.finer(this + ": rejecting " + m.getIntroductionRequest());
-			try {
-				router.send(new IntroductionRefusedMessage(m.getIntroductionRequest(), getAddress()));
-			} catch (IOException e) {
-				logger.severe("Failed to send message: " + e);
-			}
-			return false;
-		}
-
-	}
-
-	private void processTargetResponse(IntroductionMessage msg) {
+	public void send(Message m) {
 		try {
-			router.send(new AckMessage(msg.getSrc(), getAddress()));
+			implementation.getComms().send(m);
 		} catch (IOException e) {
-			logger.severe(this + ": Failed to acknowledge " + msg + ": " + e);
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		SNDPMessage response = null;
-		if (msg instanceof IntroductionAcceptedMessage) {
-			IntroductionRequest previousIntroduction = null;
-			try {
-				previousIntroduction = router.getIntroductionRequestForNeighbor(msg.getIntroductionRequest().requester,
-						msg.getIntroductionRequest().destination);
-			} catch (IOException e) {
-				logger.severe(this + ": cannot obtain intro request to "
-						+ addrToString(msg.getIntroductionRequest().requester)
-						+ ", and so will not be able to send intro complete OR to process feedback.");
-			}
-			if (logger.isLoggable(FINEST)) {
-				logger.finest(this + ": mapping outgoing " + msg.getIntroductionRequest() + " to previous "
-						+ previousIntroduction);
-			}
-			pendingFeedbacksToReceive.put(msg.getIntroductionRequest(),
-					new TimeAndIntroductionRequest(eventingSystem.getCurrentTime(), previousIntroduction));
-			response = new IntroductionCompletedMessage(msg.getIntroductionRequest(), msg.getSrc());
-		} else if (msg instanceof IntroductionRefusedMessage) {
-			System.out.println(this + " sending denied because of " + msg);
-			response = new IntroductionDeniedMessage(msg.getIntroductionRequest());
-		} else {
-			System.err.println(
-					"Invariant Violation! processTargetResponse should only see Introduction Accepted or Introduction Refused messages.");
-			System.err.println("\t---> " + msg);
-			System.exit(-1);
-		}
-		try {
-			router.send(response);
-		} catch (IOException e) {
-			logger.severe(this + " Failed to send " + response + ": " + e);
-		}
-		// Closing the connection is now being handled in the VPN
-//		try {
-//			router.closeIntroducedVPN(msg.getIntroductionRequest().requester);
-//		} catch (IOException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
 	}
 
-	protected void processIntroductionRequest(IntroductionRequestMessage m) {
-		IntroductionRequest ir = m.getIntroductionRequest();
-		if (!ir.requester.equals(m.getSrc())) {
-			logger.severe(
-					this + ": Invariant Violation. Received introduction request, but ir.requester != m.getSrc().\n"
-							+ "\tir=" + ir + ", m=" + m);
-			return;
-		}
-		Pedigree p = getPedigree(ir.requester);
-		// System.out.println(this + " received " + ir + ", pedigree=" + p);
-		if (reputationModule.reputationIsGreaterThanThreshold(p, verbose)) {
-			DiscoveryService.Query query = implementation.getDiscoveryService().createQuery(m.getServerAddress());
-			// TODO Create a state machine for handling introduction requests, and add the
-			// query to that state machine.
-			InetAddress nextHop = implementation.getDiscoveryService().getNextHopTo(query);
-			IntroductionOfferMessage offer = //
-					new IntroductionOfferMessage(m.getIntroductionRequest(), nextHop, getPedigree(m.getSrc()));
-			try {
-				router.send(offer);
-			} catch (IOException e) {
-				System.out.println(this + " denying introduction request " + ir
-						+ " because unable to send offer to target " + nextHop);
-				logger.severe("Failed to send offer to " + nextHop + ": " + e);
-				try {
-					router.send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
-					// Closing the connection is now being handled in send!
-					// router.closeIntroducedVPN(m.getIntroductionRequest().requester);
-				} catch (IOException e1) {
-					// ignore the failure.
-				}
-			}
-			return;
-		}
-		// else
-		try {
-			System.out.println(this + " denying introduction request " + ir + " because of too low of a reputation.");
-			router.send(new IntroductionDeniedMessage(m.getIntroductionRequest()));
-		} catch (IOException e) {
-			// ignore the failure
-		}
+	private void send(FeedbackMessage fm) {
+		send(new SNDPMessageTransmissionProtocol(this, null, fm, verbose), fm);
 	}
 
 	@Override
@@ -473,10 +394,6 @@ public class SNDNode implements EventProcessor {
 
 	public EventingSystem getEventingSystem() {
 		return eventingSystem;
-	}
-
-	public Implementation getImplementation() {
-		return implementation;
 	}
 
 	@Override
@@ -512,14 +429,124 @@ public class SNDNode implements EventProcessor {
 			t.start();
 			eventingSystem.scheduleEventRelative(this, e, MAINTENANCE_INTERVAL);
 		}
+		if (e instanceof Message) {
+			this.receive((Message) e);
+		}
 	}
 
 	public Logger getLogger() {
 		return logger;
 	}
 
-	public void linkClosed(InetAddress neighbor) {
-		// System.out.println(this + ": " + vpn + " is closed.");
+	public synchronized void send(SNDPMessageTransmissionProtocol sender, SNDPMessage message) {
+		try {
+			implementation.getComms().send(message);
+		} catch (IOException e) {
+			sender.receive(StateMachine.FAILURE_EVENT);
+		}
+		ackWaiters.put(message.getIdentifier(), sender);
+	}
+
+	public synchronized void send(IntroductionProtocol protocol, IntroductionMessage message) {
+		if (!registeredProtocols.containsKey(protocol.getIntroductionRequest())) {
+			registeredProtocols.put(protocol.getIntroductionRequest(), protocol);
+		}
+		SNDPMessageTransmissionProtocol stp = new SNDPMessageTransmissionProtocol(this, protocol, message, verbose);
+		stp.begin();
+	}
+
+	/**
+	 * 
+	 * @param introductionRequest
+	 * @param nbr
+	 * @return true if the neighbor is in our set of introduced neighbors.
+	 */
+	public synchronized boolean addIntroductionRequestToVPN(IntroductionRequest introductionRequest, InetAddress nbr) {
+		Set<IntroductionRequest> requests = introducedNeighbors.get(nbr);
+		if (requests == null) {
+			return false;
+		}
+		requests.add(introductionRequest);
+		return true;
+	}
+
+	public synchronized void removeIntroductionRequestFromVPN(IntroductionRequest introductionRequest,
+			InetAddress nbr) {
+		Set<IntroductionRequest> requests = introducedNeighbors.get(nbr);
+		if (requests == null) {
+			return;
+		}
+		requests.remove(introductionRequest);
+		if (requests.isEmpty()) {
+			introducedNeighbors.remove(nbr);
+			implementation.getVPNManager().closeVPN(nbr);
+			implementation.getComms().removeRoutesVia(nbr);
+		}
+	}
+
+	public synchronized void closeVPN(InetAddress nbr) throws IOException {
+		if (!aprioriNeighbors.contains(nbr)) {
+			throw new IOException(nbr + " is not an a-priori neighbor.");
+		}
+		aprioriNeighbors.remove(nbr);
+		implementation.getVPNManager().closeVPN(nbr);
+		implementation.getComms().removeRoutesVia(nbr);
+	}
+
+	public Object generateKeyingMaterial() {
+		// TODO Auto-generated method stub
+		return new Object() {
+			public String toString() {
+				return "keying material";
+			}
+		};
+	}
+
+	public synchronized void createVPN(InetAddress nbr, Object keyingMaterial) throws IOException {
+		if (aprioriNeighbors.contains(nbr)) {
+			return;
+		}
+		implementation.getVPNManager().createVPN(nbr, keyingMaterial);
+		aprioriNeighbors.add(nbr);
+		return;
+	}
+
+	public synchronized boolean createVPN(InetAddress nbr, IntroductionRequest introductionRequest,
+			Object keyingMaterial) {
+		if (introductionRequest == null) {
+			throw new NullPointerException("There must be a non-null introduction request.");
+		}
+		Set<IntroductionRequest> requests = introducedNeighbors.get(nbr);
+		if (requests != null) {
+			requests.add(introductionRequest);
+			return true;
+		}
+		try {
+			implementation.getVPNManager().createVPN(nbr, keyingMaterial);
+		} catch (IOException e) {
+			return false;
+		}
+		requests = new HashSet<>();
+		requests.add(introductionRequest);
+		introducedNeighbors.put(nbr, requests);
+		return true;
+	}
+
+	public synchronized void unregisterProtocol(IntroductionProtocol proto) {
+		registeredProtocols.remove(proto.getIntroductionRequest());
+	}
+
+	public InetAddress getNextHopTo(InetAddress destination) {
+		Query query = implementation.getDiscoveryService().createQuery(destination);
+		return implementation.getDiscoveryService().getNextHopTo(query);
+	}
+
+	public void addRoute(InetAddress dst, InetAddress target) {
+		implementation.getComms().addRoute(dst, target);
+	}
+
+	public synchronized void unregisterAckWaiter(int id) {
+		ackWaiters.remove(id);
 	}
 
 }

@@ -9,7 +9,7 @@ public class AddIntroductionRequestMessage extends IntroductionMessage {
 	private static final long serialVersionUID = 1L;
 
 	public AddIntroductionRequestMessage(InetAddress dst, InetAddress src, IntroductionRequest req) {
-		super(dst, src, req, MessageType.ADD_INTRODUCTION);
+		super(dst, src, req, MessageType.ADD_INTRODUCTION_REQUEST);
 	}
 
 }

@@ -7,13 +7,14 @@ import java.net.InetAddress;
 import java.util.Random;
 import java.util.logging.Logger;
 
+import com.github.glfrazier.event.Event;
+import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.Feedback;
 import com.github.glfrazier.snd.node.MessageReceiver;
 import com.github.glfrazier.snd.protocol.message.AckMessage;
 import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.simulation.TrafficGenerator.MessageContent;
-import com.github.glfrazier.snd.util.VPN;
 
 public class TrafficReceiver implements MessageReceiver {
 
@@ -26,7 +27,7 @@ public class TrafficReceiver implements MessageReceiver {
 	private Simulation sim;
 	private Random random = new Random();
 
-	private VPN vpnToProxy;
+	private SimVPN vpnToProxy;
 	private InetAddress address;
 	private Statistics stats;
 
@@ -83,20 +84,9 @@ public class TrafficReceiver implements MessageReceiver {
 		return "TrafficReceiver<" + addrToString(address) + ">";
 	}
 
-	public void attachToServer(VPN vpn) {
+	public void attachToServer(SimVPN vpn) {
 		this.vpnToProxy = vpn;
 	}
 
-	@Override
-	public void vpnClosed(VPN vpn) {
-		new Exception(this + ": the VPN should never be closed!").printStackTrace();
-		System.exit(-1);
-	}
-
-	@Override
-	public void vpnOpened(VPN vpn) {
-		// TODO Auto-generated method stub
-		
-	}
 
 }

@@ -10,6 +10,8 @@ public interface Implementation {
 
 	public DiscoveryService getDiscoveryService();
 
-	public VPNFactory getVpnFactory();
+	public VPNManager getVPNManager();
+	
+	public CommsModule getComms();
 
 }

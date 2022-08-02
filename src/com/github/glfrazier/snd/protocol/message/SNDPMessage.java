@@ -1,8 +1,7 @@
 package com.github.glfrazier.snd.protocol.message;
 
 import java.net.InetAddress;
-
-import com.github.glfrazier.snd.protocol.IntroductionRequest;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * The messages that comprise an introduction handshake.
@@ -11,7 +10,11 @@ import com.github.glfrazier.snd.protocol.IntroductionRequest;
 public abstract class SNDPMessage extends Message {
 
 	private static final long serialVersionUID = 1L;
+	
+	private static final AtomicInteger INDEX = new AtomicInteger(0);
 
+	protected final int id;
+	
 	protected MessageType type;
 
 	public enum MessageType {
@@ -52,15 +55,6 @@ public abstract class SNDPMessage extends Message {
 		INTRODUCTION_DENIED,
 
 		/**
-		 * A message from an introducer to the requester, denying the introduction BUT
-		 * announcing the ability to route to the destination. This will typically be
-		 * sent by a server proxy (because the proxied-for app server does not
-		 * participate in the SND protocol), but technically this could occur at any
-		 * point in the topology.
-		 */
-		INTRODUCTION_DENIED_WILL_ROUTE,
-
-		/**
 		 * Send/receive feedback about a transaction
 		 */
 		FEEDBACK,
@@ -73,22 +67,23 @@ public abstract class SNDPMessage extends Message {
 		/**
 		 * Tell the other end of an introduced VPN to add an introduction to the VPN
 		 */
-		ADD_INTRODUCTION,
+		ADD_INTRODUCTION_REQUEST,
 
 		/**
 		 * Acknowledge receipt of messages.
 		 */
-		ACK,
-
-		/**
-		 * Let the opposing node know that the link has been half-closed. This has the
-		 * semantics of an ACK, except that it must itself be acknowledged.
-		 */
-		LINK_HALF_CLOSED
+		ACK
 	};
 
 	public SNDPMessage(InetAddress dst, InetAddress src, MessageType type) {
 		super(dst, src);
+		this.id = INDEX.getAndIncrement();
+		this.type = type;
+	}
+	
+	protected SNDPMessage(InetAddress dst, InetAddress src, int id, MessageType type) {
+		super(dst, src);
+		this.id = id;
 		this.type = type;
 	}
 
@@ -98,7 +93,11 @@ public abstract class SNDPMessage extends Message {
 
 	@Override
 	public String toString() {
-		return super.toString(type.toString());
+		return super.toString(type.toString() + "." + id);
+	}
+
+	public final int getIdentifier() {
+		return id;
 	}
 
 }

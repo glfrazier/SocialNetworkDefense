@@ -1,11 +1,8 @@
 package com.github.glfrazier.snd.node;
 
-import java.io.IOException;
 import java.net.InetAddress;
-import java.util.logging.Logger;
 
 import com.github.glfrazier.snd.protocol.message.Message;
-import com.github.glfrazier.snd.util.VPN;
 
 /**
  * This interface facilitates building the simulation, by allowing there to be
@@ -29,8 +26,4 @@ public interface MessageReceiver {
 	 */
 	public InetAddress getAddress();
 	
-	public void vpnClosed(VPN vpn);
-	
-	public void vpnOpened(VPN vpn);
-
 }

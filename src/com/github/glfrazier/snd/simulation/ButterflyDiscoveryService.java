@@ -1,6 +1,7 @@
 package com.github.glfrazier.snd.simulation;
 
 import java.net.InetAddress;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -75,11 +76,15 @@ public class ButterflyDiscoveryService implements DiscoveryService {
 		}
 
 	}
-	
+
 	@Override
 	public String toString() {
 		return "ButterflyDiscoveryService(" + here + ")";
 	}
 
+	@Override
+	public InetAddress getProxyFor(InetAddress dst) {
+		return networkModel.getProxyFor(dst);
+	}
 
 }

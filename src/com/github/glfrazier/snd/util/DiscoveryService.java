@@ -26,6 +26,19 @@ public interface DiscoveryService {
 	public InetAddress getNextHopTo(Query query);
 
 	/**
+	 * Obtain the address of the proxy for the destination. Returns the address of
+	 * the destination if the destination is itself in the SND network (i.e.,
+	 * requires no proxy).
+	 * 
+	 * @param dst the destination address of a message
+	 * @return the argument <code>dst</code> if the destination is in the network;
+	 *         or the address of the destination's proxy; or <code>null</code> if
+	 *         the provided address is neither part of the network nor has a
+	 *         registered proxy.
+	 */
+	public InetAddress getProxyFor(InetAddress dst);
+
+	/**
 	 * Maintain the state of the search.
 	 */
 	public interface Query {

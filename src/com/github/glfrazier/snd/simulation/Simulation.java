@@ -13,19 +13,18 @@ import java.util.Properties;
 import java.util.Random;
 
 import com.github.glfrazier.event.EventingSystem;
-import com.github.glfrazier.snd.node.ClientProxy;
+import com.github.glfrazier.snd.node.ProxyNode;
 import com.github.glfrazier.snd.node.SNDNode;
-import com.github.glfrazier.snd.node.ServerProxy;
+import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 import com.github.glfrazier.snd.util.PropertyParser;
-import com.github.glfrazier.snd.util.VPN;
 
 public class Simulation {
 
 	private static final String DEFAULT_BASE_ADDRESS = "10.0.0.0";
 	private EventingSystem eventingSystem;
 	private Properties properties;
-	private List<ClientProxy> clients = new ArrayList<>();
-	private List<ServerProxy> servers = new ArrayList<>();
+	private List<ProxyNode> clients = new ArrayList<>();
+	private List<ProxyNode> servers = new ArrayList<>();
 	private TrafficGenerator[] appClients;
 	private TrafficReceiver[] appServers;
 	private Random simRandom;
@@ -117,8 +116,9 @@ public class Simulation {
 					SNDNode ij = introducers.get(j);
 					if (topology.areConnected(ii.getAddress(), ij.getAddress())) {
 						try {
-							ii.router.openLink(ij.getAddress(), null);
-							ij.router.openLink(ii.getAddress(), null);
+							Object keyingMaterial = ii.generateKeyingMaterial();
+							ii.createVPN(ij.getAddress(), keyingMaterial);
+							ij.createVPN(ii.getAddress(), keyingMaterial);
 						} catch (IOException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
@@ -140,14 +140,15 @@ public class Simulation {
 			int index = 0;
 			for (int i = 0; i < numberOfServers; i++) {
 				SimImpl impl = new SimImpl(topology);
-				ServerProxy serverProxy = new ServerProxy(serverAddress, impl, eventingSystem, properties);
+				ProxyNode serverProxy = new ProxyNode(serverAddress, impl, eventingSystem, properties, stats);
 				impl.setNode(serverProxy);
 				servers.add(serverProxy);
 				InetAddress introAddr = topology.getAddressOfElement(index, colsOfIntroducers - 1);
 				SNDNode introImpl = introducerMap.get(introAddr);
 				try {
-					serverProxy.connectFinalIntroducer(introAddr);
-					introImpl.router.openLink(serverAddress, null);
+					Object keyingMaterial = serverProxy.generateKeyingMaterial();
+					serverProxy.connectInitialIntroducer(introAddr, keyingMaterial);
+					introImpl.createVPN(serverAddress, keyingMaterial);
 				} catch (IOException e) {
 					e.printStackTrace();
 					System.exit(-1);
@@ -176,14 +177,15 @@ public class Simulation {
 			int index = 0;
 			for (int i = 0; i < numberOfClients; i++) {
 				SimImpl impl = new SimImpl(topology);
-				ClientProxy clientProxy = new ClientProxy(clientAddress, impl, eventingSystem, properties, stats);
+				ProxyNode clientProxy = new ProxyNode(clientAddress, impl, eventingSystem, properties, stats);
 				impl.setNode(clientProxy);
 				clients.add(clientProxy);
 				InetAddress introAddr = topology.getAddressOfElement(index, 0);
 				SNDNode introImpl = introducerMap.get(introAddr);
 				try {
-					clientProxy.connectInitialIntroducer(introAddr);
-					introImpl.router.openLink(clientAddress, null);
+					Object keyingMaterial = clientProxy.generateKeyingMaterial();
+					clientProxy.connectInitialIntroducer(introAddr, keyingMaterial);
+					introImpl.createVPN(clientAddress, keyingMaterial);
 				} catch (IOException e) {
 					e.printStackTrace();
 					System.exit(-1);
@@ -210,17 +212,20 @@ public class Simulation {
 		InetAddress receiverAddress = firstReceiverAddress;
 		appServers = new TrafficReceiver[servers.size()];
 		int index = 0;
-		SimVPNFactory factory = new SimVPNFactory(eventingSystem);
-		for (ServerProxy s : servers) {
+		for (ProxyNode proxy : servers) {
 			TrafficReceiver receiver = new TrafficReceiver(receiverAddress, falsePositive, falseNegative, this);
+			SimVPNManager factory = new SimVPNManager(eventingSystem, receiver);
 			appServers[index++] = receiver;
-			VPN vpn = factory.createVPN(receiver, s.getAddress(), null);
-			receiver.attachToServer(vpn);
-			s.connectAppServer(receiverAddress);
+			factory.createVPN(proxy.getAddress(), null);
+			receiver.attachToServer(SimVPNManager.VPN_MAP.get(new AddressPair(receiver.getAddress(), proxy.getAddress())));
+			proxy.connectProxiedHost(receiverAddress, null);
 			lastReceiverAddress = receiverAddress;
 			// Create the TrafficReceiver's entry in the proxy lookup service
-			topology.connectAppServer(receiverAddress, s.getAddress());
+			topology.setProxyFor(receiverAddress, proxy.getAddress());
 			receiverAddress = incrementAddress(receiverAddress);
+			if (verbose) {
+				System.out.println("Constructed " + receiver + " and connected it to " + proxy);
+			}
 		}
 
 		// construct the app clients (TrafficGenerators) and connect them to Clients
@@ -231,13 +236,20 @@ public class Simulation {
 		InetAddress generatorAddress = firstGeneratorAddress;
 		appClients = new TrafficGenerator[clients.size()];
 		index = 0;
-		for (ClientProxy proxy : clients) {
+		for (ProxyNode proxy : clients) {
 			TrafficGenerator generator = new TrafficGenerator(generatorAddress, this, eventingSystem);
-			VPN vpn = factory.createVPN(generator, proxy.getAddress(), null);
-			generator.attachToProxy(vpn);
-			proxy.connectAppClient(generatorAddress);
+			SimVPNManager factory = new SimVPNManager(eventingSystem, generator);
+			factory.createVPN(proxy.getAddress(), null);
+			generator.attachToProxy(
+					SimVPNManager.VPN_MAP.get(new AddressPair(generator.getAddress(), proxy.getAddress())));
+			proxy.connectProxiedHost(generatorAddress, null);
+			// Create the TrafficGenerator's entry in the proxy lookup service
+			topology.setProxyFor(generatorAddress, proxy.getAddress());
 			appClients[index++] = generator;
 			generatorAddress = incrementAddress(generatorAddress);
+			if (verbose) {
+				System.out.println("Constructed " + generator + " and connected it to " + proxy);
+			}
 		}
 		lastGeneratorAddress = generatorAddress;
 

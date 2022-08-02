@@ -17,12 +17,6 @@ import com.github.glfrazier.snd.protocol.IntroductionRequest;
  */
 public class FeedbackMessage extends IntroductionMessage implements Serializable, Event {
 
-	/**
-	 * 
-	 */
-	public static final FeedbackMessage SAMPLE_FEEDBACK_MESSAGE = //
-			new FeedbackMessage(SAMPLE_INTRODUCTION_REQUEST, null, null, null);
-
 	private static final long serialVersionUID = 1L;
 
 	private Feedback feedback;

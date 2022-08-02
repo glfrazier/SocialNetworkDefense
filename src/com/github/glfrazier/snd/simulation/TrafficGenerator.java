@@ -14,7 +14,6 @@ import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.MessageReceiver;
 import com.github.glfrazier.snd.protocol.message.Message;
-import com.github.glfrazier.snd.util.VPN;
 
 public class TrafficGenerator implements MessageReceiver, EventProcessor {
 
@@ -30,7 +29,7 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 	public static final String ATTACK_CONTENT = "Attack Content";
 
 	private InetAddress address;
-	private VPN vpnToClient;
+	private SimVPN vpnToClient;
 	private float exponentialRate;
 
 	private Random random;
@@ -52,7 +51,7 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		es.scheduleEventRelative(this, WAKEUP_EVENT, getDelayToNextEvent());
 	}
 
-	public void attachToProxy(VPN vpn) {
+	public void attachToProxy(SimVPN vpn) {
 		this.vpnToClient = vpn;
 	}
 
@@ -149,12 +148,6 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		isAttacker = true;
 	}
 
-	@Override
-	public void vpnClosed(VPN vpn) {
-		new Exception(this + ": the VPN should never be closed!").printStackTrace();
-		System.exit(-1);
-	}
-
 	public static class MessageContent implements Serializable {
 		private static final AtomicLong ID_GEN = new AtomicLong(0);
 		public final boolean isResponse;
@@ -176,12 +169,6 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		public String toString() {
 			return (isResponse ? "Response to " : "") + "App Msg " + identifier + (isAttack ? "(ATTACK)" : "(BENIGN)");
 		}
-	}
-
-	@Override
-	public void vpnOpened(VPN vpn) {
-		// TODO Auto-generated method stub
-		
 	}
 
 }

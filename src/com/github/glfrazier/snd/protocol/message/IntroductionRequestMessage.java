@@ -1,6 +1,5 @@
 package com.github.glfrazier.snd.protocol.message;
 
-import static com.github.glfrazier.snd.protocol.IntroductionRequest.SAMPLE_INTRODUCTION_REQUEST;
 import java.io.Serializable;
 import java.net.InetAddress;
 
@@ -28,19 +27,10 @@ import com.github.glfrazier.statemachine.StateMachine;
  */
 public class IntroductionRequestMessage extends IntroductionMessage implements Serializable, Event {
 
-	public static final IntroductionRequestMessage SAMPLE_INTRODUCTION_REQUEST_MSG = new IntroductionRequestMessage(
-			SAMPLE_INTRODUCTION_REQUEST);
-
 	private static final long serialVersionUID = 1L;
-	private IntroductionRequest req;
 
 	public IntroductionRequestMessage(IntroductionRequest req) {
 		super(req.introducer, req.requester, req, MessageType.INTRODUCTION_REQUEST);
-		this.req = req;
-	}
-
-	public InetAddress getServerAddress() {
-		return req.destination;
 	}
 
 }
