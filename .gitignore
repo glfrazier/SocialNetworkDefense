@@ -1,6 +1,9 @@
 # dot files (e.g., .classpath)
 .*
 
+# ignore changes to logging.conf
+logging.conf
+
 # directories to ignore
 bin/
 results/
