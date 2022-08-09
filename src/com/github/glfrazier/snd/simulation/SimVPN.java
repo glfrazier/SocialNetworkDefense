@@ -5,6 +5,7 @@ import static java.util.logging.Level.FINE;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.Map;
 import java.util.logging.Logger;
 
 import com.github.glfrazier.event.Event;
@@ -36,24 +37,28 @@ public class SimVPN implements EventProcessor {
 	};
 
 	private SimVPN remote;
-	private MessageReceiver local;
-	private EventingSystem eventingSystem;
-	private InetAddress remoteAddress;
+	private final MessageReceiver local;
+	private final EventingSystem eventingSystem;
+	private final InetAddress remoteAddress;
 	private boolean closed = false;
 
-	public SimVPN(MessageReceiver local, InetAddress remote, EventingSystem eventingSystem) {
+	private final Simulation sim;
+
+	public SimVPN(Simulation sim, MessageReceiver local, InetAddress remote, EventingSystem eventingSystem) throws IllegalStateException {
+		this.sim = sim;
 		this.local = local;
 		this.remoteAddress = remote;
 		this.eventingSystem = eventingSystem;
 		AddressPair key = new AddressPair(local.getAddress(), remoteAddress);
-		SimVPN prior = SimVPNManager.VPN_MAP.get(key);
-		if (prior != null) {
-			prior.close(false);
-			LOGGER.severe(this + ": being created when a duplicate already exists!");
-//			new Exception(this + ": being created when a duplicate already exists!").printStackTrace();
-//			System.exit(-1);
+		Map<AddressPair, SimVPN> vpnMap = sim.getVpnMap();
+		synchronized (vpnMap) {
+			SimVPN prior = vpnMap.get(key);
+			if (prior != null) {
+				LOGGER.severe(sim.addTimePrefix(this + ": being created when a duplicate already exists!"));
+				throw new IllegalStateException(this + ": being created when a duplicate already exists!");
+			}
+			vpnMap.put(key, this);
 		}
-		SimVPNManager.VPN_MAP.put(key, this);
 		connect();
 	}
 
@@ -62,7 +67,7 @@ public class SimVPN implements EventProcessor {
 			return;
 		}
 		synchronized (this) {
-			remote = SimVPNManager.VPN_MAP.get(new AddressPair(remoteAddress, local.getAddress()));
+			remote = sim.getVpnMap().get(new AddressPair(remoteAddress, local.getAddress()));
 			if (remote == null) {
 				return;
 			}
@@ -70,41 +75,51 @@ public class SimVPN implements EventProcessor {
 		remote.connect();
 	}
 
-	public synchronized void send(Message m) throws IOException {
+	public synchronized void send(Message m) throws IOException, IllegalStateException {
+		if (closed) {
+			throw new IOException(sim.addTimePrefix(this + ": closed, cannot send " + m));
+		}
 		if (remote == null) {
-			LOGGER.severe(this + ": not connected to " + addrToString(remoteAddress) + ", cannot send " + m);
-			throw new IOException(this + ": not connected to " + addrToString(remoteAddress) + ", cannot send " + m);
+			throw new NotConnectedException(sim.addTimePrefix(this + ": is not yet connected, cannot send " + m));
 		}
 		eventingSystem.scheduleEventRelative(remote, m, SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
 	}
+	
+	@SuppressWarnings("serial")
+	public static class NotConnectedException extends IOException {
 
-	private void close(boolean remotelyInvoked) {
+		public NotConnectedException(String msg) {
+			super(msg);
+		}
+		
+	
+	}
+
+	private synchronized void close(boolean remotelyInvoked) {
 		if (closed) {
 			return;
 		}
 		if (LOGGER.isLoggable(FINE)) {
-			LOGGER.fine(this + ": being closed.");
+			LOGGER.fine(sim.addTimePrefix(this + ": being closed."));
 		}
-		synchronized (this) {
-			SimVPNManager.VPN_MAP.remove(new AddressPair(local.getAddress(), remoteAddress));
-			if (remotelyInvoked) {
-				local.vpnClosed(remoteAddress);
-			} else {
-				if (remote != null) {
-					eventingSystem.scheduleEventRelative(remote, REMOTE_CLOSE_VPN_EVENT,
-							SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
-				}
+		sim.getVpnMap().remove(new AddressPair(local.getAddress(), remoteAddress));
+		if (remotelyInvoked) {
+			local.vpnClosed(remoteAddress);
+		} else {
+			if (remote != null) {
+				eventingSystem.scheduleEventRelative(remote, REMOTE_CLOSE_VPN_EVENT,
+						SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
 			}
-			closed = true;
-			remote = null;
 		}
+		closed = true;
+		remote = null;
 	}
 
 	@Override
 	public synchronized void process(Event e, EventingSystem eventingSystem) {
 		if (closed) {
 			// if (!e.equals(LOCAL_CLOSE_VPN_EVENT) && !e.equals(REMOTE_CLOSE_VPN_EVENT)) {
-			LOGGER.warning(this + ": discarding " + e + " because VPN is closed.");
+			LOGGER.warning(sim.addTimePrefix(this + ": discarding " + e + " because VPN is closed."));
 			// }
 			return;
 		}

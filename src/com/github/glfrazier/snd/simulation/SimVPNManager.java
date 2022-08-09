@@ -17,21 +17,27 @@ public class SimVPNManager implements VPNManager {
 
 	private MessageReceiver local;
 
-	static final Map<AddressPair, SimVPN> VPN_MAP = Collections.synchronizedMap(new HashMap<>());
+	private Simulation sim;
 
-	public SimVPNManager(EventingSystem es, MessageReceiver local) {
+	public SimVPNManager(Simulation sim, EventingSystem es, MessageReceiver local) {
 		this.eventingSystem = es;
 		this.local = local;
+		this.sim = sim;
 	}
 
 	@Override
 	public synchronized void createVPN(InetAddress remote, Object keyingMaterial) throws IOException {
-		SimVPN vpn = new SimVPN(local, remote, eventingSystem);
+		try {
+		SimVPN vpn = new SimVPN(sim, local, remote, eventingSystem);
+		} catch (IllegalStateException e) {
+			// Let's see this, but in general we'll ignore it(?). The VPN already exists...
+			e.printStackTrace();
+		}
 	}
 
 	@Override
 	public synchronized void closeVPN(InetAddress remote) {
-		SimVPN vpn = VPN_MAP.get(new AddressPair(local.getAddress(), remote));
+		SimVPN vpn = sim.getVpnMap().get(new AddressPair(local.getAddress(), remote));
 		if (vpn == null)
 			return;
 		// A node will close a VPN at the same time that an ACK is being sent. So, we

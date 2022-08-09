@@ -20,6 +20,19 @@ public class IntroductionCompletedMessage extends IntroductionMessage implements
 		this.nextStep = target;
 	}
 
+	/**
+	 * The constructor used by the TargetProtocol when an introduction results in
+	 * reuse of an existing VPN.
+	 * 
+	 * @param req the introduction request that has been completed
+	 * @param target the target node sending this introduction completed message to the introducer 
+	 */
+	public IntroductionCompletedMessage(IntroductionRequest req, InetAddress target) {
+		super(req.introducer, target, req, MessageType.INTRODUCTION_COMPLETED);
+		this.keyingMaterial = null;
+		this.nextStep = null;
+	}
+
 	public InetAddress getNewNeighbor() {
 		return nextStep;
 	}
@@ -29,7 +42,10 @@ public class IntroductionCompletedMessage extends IntroductionMessage implements
 	}
 
 	public String toString() {
-		return super.toString() + "(connected to " + addrToString(nextStep) + ")";
+		return super.toString() + (nextStep == null ? //
+				"(target-to-introducer, announcing VPN resuse)" : //
+				"(connected to " + addrToString(nextStep) + ")" //
+		);
 	}
 
 }

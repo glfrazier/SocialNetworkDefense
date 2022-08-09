@@ -17,7 +17,7 @@ snd.sim.introducer_fanout: 4
 #
 snd.sim.number_of_servers: 200
 snd.sim.client_traffic_exponential: 0.01
-snd.sim.number_of_clients: 100000
+snd.sim.number_of_clients: 10000
 #
 # Note that the number of attackers must be lte the number
 # of clients, because the attackers are clients.

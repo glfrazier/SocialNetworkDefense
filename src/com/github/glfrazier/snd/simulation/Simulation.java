@@ -2,19 +2,21 @@ package com.github.glfrazier.snd.simulation;
 
 import static com.github.glfrazier.snd.util.AddressUtils.incrementAddress;
 
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
+import com.github.glfrazier.event.Event;
+import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
-import com.github.glfrazier.snd.node.ProxyNode;
 import com.github.glfrazier.snd.node.Node;
+import com.github.glfrazier.snd.node.ProxyNode;
 import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 import com.github.glfrazier.snd.util.PropertyParser;
 
@@ -57,8 +59,8 @@ public class Simulation {
 		stats = new Statistics(properties);
 		endTime = getLongProperty("snd.sim.end_time");
 		eventingSystem.setEndTime(endTime);
-		System.out.println("Simulation will end at time " + endTime);
-		System.out.println("===========================================");
+		
+		System.out.println("Properties parsed; building the network.");
 
 		// build the introducer network
 		Map<InetAddress, Node> introducerMap = new HashMap<>();
@@ -74,7 +76,7 @@ public class Simulation {
 			for (int row = 0; row < rowsOfIntroducers; row++) {
 				for (int col = 0; col < colsOfIntroducers; col++) {
 					InetAddress address = topology.getAddressOfElement(row, col);
-					SimImpl impl = new SimImpl(topology);
+					SimImpl impl = new SimImpl(this, topology);
 					Node introducer = new Node(address, impl, eventingSystem, properties);
 					impl.setNode(introducer);
 					introducers.add(introducer);
@@ -113,7 +115,7 @@ public class Simulation {
 			InetAddress serverAddress = firstServerAddress;
 			int index = 0;
 			for (int i = 0; i < numberOfServers; i++) {
-				SimImpl impl = new SimImpl(topology);
+				SimImpl impl = new SimImpl(this, topology);
 				ProxyNode serverProxy = new ProxyNode(serverAddress, impl, eventingSystem, properties, stats);
 				impl.setNode(serverProxy);
 				servers.add(serverProxy);
@@ -150,7 +152,7 @@ public class Simulation {
 			InetAddress clientAddress = firstClientAddress;
 			int index = 0;
 			for (int i = 0; i < numberOfClients; i++) {
-				SimImpl impl = new SimImpl(topology);
+				SimImpl impl = new SimImpl(this, topology);
 				ProxyNode clientProxy = new ProxyNode(clientAddress, impl, eventingSystem, properties, stats);
 				impl.setNode(clientProxy);
 				clients.add(clientProxy);
@@ -188,10 +190,10 @@ public class Simulation {
 		int index = 0;
 		for (ProxyNode proxy : servers) {
 			TrafficReceiver receiver = new TrafficReceiver(receiverAddress, falsePositive, falseNegative, this);
-			SimVPNManager factory = new SimVPNManager(eventingSystem, receiver);
+			SimVPNManager factory = new SimVPNManager(this, eventingSystem, receiver);
 			appServers[index++] = receiver;
 			factory.createVPN(proxy.getAddress(), null);
-			receiver.attachToServer(SimVPNManager.VPN_MAP.get(new AddressPair(receiver.getAddress(), proxy.getAddress())));
+			receiver.attachToServer(getVpnMap().get(new AddressPair(receiver.getAddress(), proxy.getAddress())));
 			proxy.connectProxiedHost(receiverAddress, null);
 			lastReceiverAddress = receiverAddress;
 			// Create the TrafficReceiver's entry in the proxy lookup service
@@ -212,10 +214,10 @@ public class Simulation {
 		index = 0;
 		for (ProxyNode proxy : clients) {
 			TrafficGenerator generator = new TrafficGenerator(generatorAddress, this, eventingSystem);
-			SimVPNManager factory = new SimVPNManager(eventingSystem, generator);
+			SimVPNManager factory = new SimVPNManager(this, eventingSystem, generator);
 			factory.createVPN(proxy.getAddress(), null);
 			generator.attachToProxy(
-					SimVPNManager.VPN_MAP.get(new AddressPair(generator.getAddress(), proxy.getAddress())));
+					this.getVpnMap().get(new AddressPair(generator.getAddress(), proxy.getAddress())));
 			proxy.connectProxiedHost(generatorAddress, null);
 			// Create the TrafficGenerator's entry in the proxy lookup service
 			topology.setProxyFor(generatorAddress, proxy.getAddress());
@@ -264,6 +266,7 @@ public class Simulation {
 		}
 		// construct the statistics-gathering module
 
+		System.out.println("Network construction completed.");
 	}
 
 	private boolean getBooleanProperty(String propName, boolean defaultValue) {
@@ -350,8 +353,30 @@ public class Simulation {
 		// TODO Auto-generated method stub
 
 	}
+	
+	private void addTimeReporter() {
+		
+		long SIXTY_SECONDS = 60 * 1000;
+		
+		EventProcessor timeReporter = new EventProcessor() {
+
+			@Override
+			public void process(Event e, EventingSystem eventingSystem) {
+				printEvent(this + ": Time has passed.");
+				eventingSystem.scheduleEventRelative(this, e, SIXTY_SECONDS);
+			}
+			
+			@Override
+			public String toString() {
+				return "Time Reporter";
+			}
+			
+		};
+		eventingSystem.scheduleEvent(timeReporter, new Event() {});
+	}
 
 	public void run() {
+		addTimeReporter();
 		stats.startSimulation();
 		int numberOfThreads = getIntegerProperty("snd.number_of_threads");
 		Thread[] threads = new Thread[numberOfThreads];
@@ -359,6 +384,8 @@ public class Simulation {
 			final int thdID = i;
 			threads[i] = new Thread(null, eventingSystem, "Eventing System Thread " + thdID);
 		}
+		System.out.println("Starting the threads. The simulation will end at time " + endTime);
+		System.out.println("===========================================");
 		for (int i = 0; i < threads.length; i++) {
 			threads[i].start();
 		}
@@ -383,6 +410,10 @@ public class Simulation {
 
 	public void printEvent(String msg) {
 		System.out.println(String.format("%10.3f: %s", ((float) eventingSystem.getCurrentTime()) / 1000.0, msg));
+	}
+	
+	public String addTimePrefix(String msg) {
+		return String.format("%10.3f: %s", ((float) eventingSystem.getCurrentTime()) / 1000.0, msg);
 	}
 
 	public long getSeed() {
@@ -433,6 +464,13 @@ public class Simulation {
 
 	public long getEndTime() {
 		return endTime;
+	}
+	
+
+	private final Map<AddressPair, SimVPN> vpnMap = Collections.synchronizedMap(new HashMap<>());
+
+	public Map<AddressPair, SimVPN>  getVpnMap() {
+		return vpnMap;
 	}
 
 }

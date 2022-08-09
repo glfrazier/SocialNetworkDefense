@@ -14,13 +14,10 @@ public class IntroductionRequest implements Serializable {
 
 	private static final AtomicLong NONCE_GENERATOR = new AtomicLong(0);
 
-	public static final IntroductionRequest SAMPLE_INTRODUCTION_REQUEST = new IntroductionRequest(
-			AddressUtils.ZERO_IPv4_ADDRESS, AddressUtils.ZERO_IPv4_ADDRESS, AddressUtils.ZERO_IPv4_ADDRESS);
-
 	public final InetAddress requester;
 	public final InetAddress introducer;
 	public final InetAddress destination;
-	private final long nonce;
+	public final long nonce;
 	private transient String stringValue;
 
 	/**

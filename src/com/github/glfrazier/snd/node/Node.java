@@ -122,6 +122,8 @@ public class Node implements EventProcessor, MessageReceiver {
 
 	private Map<IntroductionRequest, StateMachine> registeredProtocols = Collections.synchronizedMap(new HashMap<>());
 
+	private Long verboseOnIntroductionRequest;
+
 	public Node(InetAddress addr, Implementation implementation, EventingSystem eventingSystem, Properties properties) {
 		this.properties = properties;
 		if (properties == null || properties.isEmpty()) {
@@ -136,6 +138,10 @@ public class Node implements EventProcessor, MessageReceiver {
 		this.introducedNeighbors = new LinkedHashMap<>();
 
 		this.verbose = getBooleanProperty("snd.node.verbose", "false");
+
+		if (properties.containsKey("snd.sim.verbose_on_IR")) {
+			verboseOnIntroductionRequest = getLongProperty("snd.sim.verbose_on_IR");
+		}
 
 		if (properties.containsKey("snd.sim." + addrToString(address) + ".verbose")) {
 			this.verbose = this.verbose || getBooleanProperty("snd.sim." + addrToString(address) + ".verbose", "false");
@@ -174,6 +180,10 @@ public class Node implements EventProcessor, MessageReceiver {
 		return PropertyParser.getIntegerProperty(propName, properties);
 	}
 
+	public long getLongProperty(String propName) {
+		return PropertyParser.getLongProperty(propName, properties);
+	}
+
 	public double getProbabilityProperty(String propName) {
 		return PropertyParser.getProbabilityProperty(propName, properties);
 	}
@@ -206,6 +216,13 @@ public class Node implements EventProcessor, MessageReceiver {
 	 */
 	public synchronized void receive(Message m) {
 		logger.fine(this + ": in node, received " + m);
+		InetAddress from = m.getSrc();
+		if (!aprioriNeighbors.contains(from) && !introducedNeighbors.containsKey(from)) {
+			// This node is in the process of closing the VPN. Probably. So, log that we are
+			// dropping this message, and then drop it.
+			logger.warning(addTimePrefix(this + ": received <" + m + "> on a VPN that does not exist. Ignoring it."));
+			return;
+		}
 		if (!(m instanceof SNDPMessage)) {
 			processMessage(m);
 			return;
@@ -222,6 +239,9 @@ public class Node implements EventProcessor, MessageReceiver {
 			e.printStackTrace();
 		}
 		IntroductionMessage im = (IntroductionMessage) m;
+		if (verboseOnIntroductionRequest != null && verboseOnIntroductionRequest == im.getIntroductionRequest().nonce) {
+			verbose = true;
+		}
 		switch (im.getType()) {
 		case ACK:
 			break;
@@ -231,7 +251,7 @@ public class Node implements EventProcessor, MessageReceiver {
 		case INTRODUCTION_REFUSED:
 			StateMachine protocol = registeredProtocols.get(im.getIntroductionRequest());
 			if (protocol == null) {
-				logger.severe(this + ": received " + im + " but there is no protocol for it.");
+				logger.severe(addTimePrefix(this + ": received " + im + " but there is no protocol for it."));
 				return;
 			}
 			protocol.receive(im);
@@ -244,6 +264,7 @@ public class Node implements EventProcessor, MessageReceiver {
 			break;
 		case ADD_INTRODUCTION_REQUEST:
 			processAddIntroductionRequest((AddIntroductionRequestMessage) m);
+			break;
 		case FEEDBACK:
 			processFeedback((FeedbackMessage) m);
 			break;
@@ -263,14 +284,14 @@ public class Node implements EventProcessor, MessageReceiver {
 	private void processAddIntroductionRequest(AddIntroductionRequestMessage m) {
 		RequesterProtocol irp = (RequesterProtocol) registeredProtocols.get(m.getIntroductionRequest());
 		if (irp == null) {
-			logger.severe(this + ": invariant violation. Received " + m
-					+ ", but there is no InitiateRequestProtocol registered.");
-			// For now, terminate
-			System.exit(-1);
+			logger.warning(this + ": Received " + m
+					+ ", but there is no InitiateRequestProtocol registered. This could be a natural race-condition outcome.");
+			return;
 		}
 		if (!addIntroductionRequestToVPN(m.getIntroductionRequest(), m.getSrc())) {
 			logger.severe(this + ": invariant violation. Received " + m
-					+ ", but addIntroductionRequestToVPN returned false.");
+					+ ", but addIntroductionRequestToVPN returned false. introducedNeighbors.keyset().contains(m.getSrc())="
+					+ this.introducedNeighbors.keySet().contains(m.getSrc()));
 			// For now, terminate
 			new Exception().printStackTrace();
 			System.exit(-1);
@@ -279,13 +300,46 @@ public class Node implements EventProcessor, MessageReceiver {
 	}
 
 	private void processIntroductionOffer(IntroductionOfferMessage m) {
+		if (registeredProtocols.containsKey(m.getIntroductionRequest())) {
+			// this is a retransmission -- do not process this message!
+			return;
+		}
 		TargetProtocol protocol = new TargetProtocol(this, m, verbose);
 		registeredProtocols.put(m.getIntroductionRequest(), protocol);
 		protocol.begin();
 	}
 
 	protected void processIntroductionRequest(IntroductionRequestMessage m) {
-		IntroducerProtocol protocol = new IntroducerProtocol(this, m, verbose);
+		if (registeredProtocols.containsKey(m.getIntroductionRequest())) {
+			// this is a retransmission -- do not process this message!
+			return;
+		}
+		IntroductionRequest irIn = m.getIntroductionRequest();
+		if (!m.getSrc().equals(irIn.requester) || !m.getDst().equals(irIn.introducer)) {
+			logger.severe(addTimePrefix(this + ": INVARIANT VIOLATION. m.getSrc()=" + addrToString(m.getSrc())
+					+ ", ir.requester=" + addrToString(irIn.requester) + ", m.getDst()=" + addrToString(m.getDst())
+					+ ", ir.introducer=" + addrToString(irIn.introducer)));
+			return;
+		}
+		IntroductionRequest requesterIntroduction = null;
+		if (introducedNeighbors.containsKey(irIn.requester)) {
+			Set<IntroductionRequest> introductions = introducedNeighbors.get(irIn.requester);
+			for (IntroductionRequest ir : introductions) {
+				if (ir.requester.equals(irIn.requester) && ir.destination.equals(irIn.destination)) {
+					requesterIntroduction = ir;
+					break;
+				}
+			}
+			if (requesterIntroduction == null) {
+				StringBuffer msg = new StringBuffer(this + " INVARIANT VIOLATION in processIntroductionRequest()\n");
+				msg.append("\tInvoked in response to event " + m);
+				msg.append("\tintroductions=" + introductions);
+				logger.severe(addTimePrefix(msg.toString()));
+				new Exception().printStackTrace();
+				System.exit(-1);
+			}
+		}
+		IntroducerProtocol protocol = new IntroducerProtocol(this, m, requesterIntroduction, verbose);
 		registeredProtocols.put(m.getIntroductionRequest(), protocol);
 		protocol.begin();
 	}
@@ -379,7 +433,8 @@ public class Node implements EventProcessor, MessageReceiver {
 			}
 			if (aprioriNeighbors.contains(introductionRequest.requester)) {
 				// We are connected to the requester -- forward the feedback to them!
-				send(new FeedbackMessage(introductionRequest.requester, getAddress(), m.getSubject(), m.getFeedback(), m.getTrigger()));
+				send(new FeedbackMessage(introductionRequest.requester, getAddress(), m.getSubject(), m.getFeedback(),
+						m.getTrigger()));
 			} else {
 				new Exception(this
 						+ ": Invariant Violation: there are no introducers, but the requester is not a long-lived neighbor. ir.requester="
@@ -461,10 +516,12 @@ public class Node implements EventProcessor, MessageReceiver {
 	public synchronized void send(SNDPMessageTransmissionProtocol sender, SNDPMessage message) {
 		try {
 			implementation.getComms().send(message);
+			ackWaiters.put(message.getIdentifier(), sender);
 		} catch (IOException e) {
-			sender.receive(StateMachine.FAILURE_EVENT);
+			// sender.receive(StateMachine.FAILURE_EVENT);
+			// instead of failing immediately on an IOException, let the sender protocol
+			// retry.
 		}
-		ackWaiters.put(message.getIdentifier(), sender);
 	}
 
 	public synchronized void send(IntroductionProtocol protocol, IntroductionMessage message) {
@@ -521,6 +578,11 @@ public class Node implements EventProcessor, MessageReceiver {
 			introducedNeighbors.remove(nbr);
 			implementation.getVPNManager().closeVPN(nbr);
 			implementation.getComms().removeRoutesVia(nbr);
+		} else {
+			if (verbose) {
+				System.out.println(
+						this + ": there are " + requests.size() + " IRs remaining on the VPN to " + addrToString(nbr));
+			}
 		}
 	}
 
@@ -612,23 +674,8 @@ public class Node implements EventProcessor, MessageReceiver {
 		}
 	}
 
-	public synchronized void addPendingFeedbackToReceive(IntroductionRequest introductionRequest) {
-		IntroductionRequest requesterIntroduction = null;
-		if (introducedNeighbors.containsKey(introductionRequest.requester)) {
-			Set<IntroductionRequest> introductions = introducedNeighbors.get(introductionRequest.requester);
-			for (IntroductionRequest ir : introductions) {
-				if (ir.requester.equals(introductionRequest.requester)
-						&& ir.destination.equals(introductionRequest.destination)) {
-					requesterIntroduction = ir;
-					break;
-				}
-			}
-			if (requesterIntroduction == null) {
-				logger.severe(this + " INVARIANT VIOLATION");
-				new Exception().printStackTrace();
-				System.exit(-1);
-			}
-		}
+	public synchronized void addPendingFeedbackToReceive(IntroductionRequest introductionRequest,
+			IntroductionRequest requesterIntroduction) {
 		synchronized (pendingFeedbacksToReceive) {
 			pendingFeedbacksToReceive.put(introductionRequest,
 					new TimeAndIntroductionRequest(eventingSystem.getCurrentTime(), requesterIntroduction));
@@ -658,6 +705,17 @@ public class Node implements EventProcessor, MessageReceiver {
 			return null;
 		}
 		return tNir.ir;
+	}
+
+	public String addTimePrefix(String msg) {
+		return String.format("%10.3f: %s", ((float) eventingSystem.getCurrentTime()) / 1000.0, msg);
+	}
+
+	public boolean checkIntroductionRequestNonce(long nonce) {
+		if (verboseOnIntroductionRequest != null && verboseOnIntroductionRequest == nonce) {
+			verbose = true;
+		}
+		return verbose;
 	}
 
 }

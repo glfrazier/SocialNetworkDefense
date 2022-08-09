@@ -18,9 +18,27 @@ import com.github.glfrazier.statemachine.Transition;
 public class IntroducerProtocol extends IntroductionProtocol {
 
 	private boolean introductionSucceeded;
+	private final IntroductionRequest previousIntroductionRequest;
 
-	public IntroducerProtocol(Node target, IntroductionRequestMessage m, boolean verbose) {
-		super(target, m.getIntroductionRequest(), "Introducer Protocol", verbose);
+	/**
+	 * This protocol starts with receipt of an introduction request; it handles
+	 * deciding whether to profer an offer and it conveys the response to the offer
+	 * to the requester. The Node constructs an IntroducerProtocol instance when it
+	 * receives an introduction request ({@link IntroductionRequestMessage}).
+	 * 
+	 * @param introducer                  the node that received the request and is
+	 *                                    creating this protocol
+	 * @param m                           the message that caused the Node to create
+	 *                                    this protocol
+	 * @param previousIntroductionRequest the introduction request that created the
+	 *                                    VPN over which the parameter
+	 *                                    <code>m</code> arrived on
+	 * @param verbose
+	 */
+	public IntroducerProtocol(Node introducer, IntroductionRequestMessage m,
+			IntroductionRequest previousIntroductionRequest, boolean verbose) {
+		super(introducer, m.getIntroductionRequest(), "Introducer Protocol", verbose);
+		this.previousIntroductionRequest = previousIntroductionRequest;
 
 		setStartState(decisionState);
 		addTransition(new Transition(decisionState, FAILURE_EVENT.getClass(), sendDeniedState));
@@ -49,7 +67,7 @@ public class IntroducerProtocol extends IntroductionProtocol {
 
 	};
 	private static final State decisionState = new State("decide to offer", decisionAction);
-	
+
 	private static final Action sendDeniedAction = new Action() {
 
 		@Override
@@ -60,7 +78,7 @@ public class IntroducerProtocol extends IntroductionProtocol {
 
 	};
 	private static final State sendDeniedState = new State("send IntroductionDeniedMessage", sendDeniedAction);
-	
+
 	private static final Action sendCompletionAction = new Action() {
 
 		@Override
@@ -85,12 +103,17 @@ public class IntroducerProtocol extends IntroductionProtocol {
 				rrp.introductionSucceeded = true;
 			}
 			if (rrp.introductionSucceeded) {
-				rrp.node.addPendingFeedbackToReceive(rrp.getIntroductionRequest());
+				rrp.node.addPendingFeedbackToReceive(rrp.getIntroductionRequest(),
+						rrp.getPreviousIntroductionRequest());
 			}
 			rrp.node.unregisterProtocol(rrp);
 		}
 
 	};
 	private static final State terminalState = new State("terminal state", terminalAction);
+
+	protected IntroductionRequest getPreviousIntroductionRequest() {
+		return previousIntroductionRequest;
+	}
 
 }

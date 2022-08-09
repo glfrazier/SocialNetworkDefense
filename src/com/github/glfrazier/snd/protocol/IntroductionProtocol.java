@@ -15,6 +15,9 @@ public class IntroductionProtocol extends StateMachine {
 		this.node = sndNode;
 		this.introductionRequest = ir;
 		this.verbose = verbose;
+		if (ir == null) {
+			throw new NullPointerException("Created with a null IntroductionRequest!");
+		}
 	}
 	
 	public IntroductionRequest getIntroductionRequest() {

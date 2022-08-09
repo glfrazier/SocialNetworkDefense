@@ -21,20 +21,22 @@ import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 import com.github.glfrazier.snd.util.CommsModule;
 
-public class SimComms implements CommsModule, MessageReceiver
-{
+public class SimComms implements CommsModule, MessageReceiver {
 
-	private Node owner;
+	private final Node owner;
 
 	private Map<InetAddress, InetAddress> routes;
 	private Map<InetAddress, Set<InetAddress>> routeTo;
-	private Map<InetAddress, SimVPN> vpnMap;
+	// private Map<InetAddress, SimVPN> vpnMap;
 
-	public SimComms(Node owner) {
+	private final Simulation sim;
+
+	public SimComms(Simulation sim, Node owner) {
+		this.sim = sim;
 		this.owner = owner;
 		routes = new HashMap<>();
 		routeTo = new HashMap<>();
-		vpnMap = Collections.synchronizedMap(new HashMap<>());
+		// vpnMap = Collections.synchronizedMap(new HashMap<>());
 	}
 
 	@Override
@@ -69,7 +71,7 @@ public class SimComms implements CommsModule, MessageReceiver
 	}
 
 	private synchronized InetAddress getRouteTo(InetAddress dst) {
-		if (SimVPNManager.VPN_MAP.containsKey(new AddressPair(owner.getAddress(), dst))) {
+		if (sim.getVpnMap().containsKey(new AddressPair(owner.getAddress(), dst))) {
 			return dst;
 		}
 		InetAddress route = routes.get(dst);
@@ -85,21 +87,24 @@ public class SimComms implements CommsModule, MessageReceiver
 	}
 
 	public synchronized void send(Message msg, InetAddress dst) throws IOException {
-		SimVPN vpn = SimVPNManager.VPN_MAP.get(new AddressPair(owner.getAddress(), dst));
+		SimVPN vpn = sim.getVpnMap().get(new AddressPair(owner.getAddress(), dst));
 		if (vpn != null) {
 			vpn.send(msg);
 			return;
 		}
 		if (msg instanceof IntroductionMessage) {
-			throw new IOException(this + ": No VPN available for: " + msg);
+			throw new IOException(sim.addTimePrefix(this + ": No VPN available for: " + msg));
 		}
 		if (!msg.getDst().equals(dst)) {
 			// We're already routed this message!
-			throw new IOException(this + ": No route to " + addrToString(msg.getDst()));
+			throw new IOException(sim
+					.addTimePrefix(this + ": No route to " + addrToString(msg.getDst()) + ", trying to send " + msg));
 		}
 		InetAddress rtr = routes.get(msg.getDst());
-		if (rtr == null)
-			throw new IOException(this + ": No route to " + addrToString(msg.getDst()));
+		if (rtr == null) {
+			throw new IOException(sim
+					.addTimePrefix(this + ": No route to " + addrToString(msg.getDst()) + ", trying to send " + msg));
+		}
 		send(msg, rtr);
 	}
 

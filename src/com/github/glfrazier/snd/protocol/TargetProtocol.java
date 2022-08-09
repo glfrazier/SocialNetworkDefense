@@ -206,8 +206,11 @@ public class TargetProtocol extends IntroductionProtocol {
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
 			TargetProtocol rop = (TargetProtocol) sm;
-			rop.node.send((IntroductionProtocol) null, new IntroductionCompletedMessage(rop.introductionRequest,
-					/* no keying material */ null, rop.introductionRequest.introducer));
+			rop.node.send(rop,
+					//
+					// Using the IntroductionCompletedMessage constructor that is specific to the TargetProtocol.
+					//
+					new IntroductionCompletedMessage(rop.introductionRequest, rop.node.getAddress()));
 			rop.receive(GOTO_TERMINAL_STATE);
 		}
 

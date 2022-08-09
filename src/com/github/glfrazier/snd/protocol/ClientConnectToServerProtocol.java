@@ -103,6 +103,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 			ClientConnectToServerProtocol protocol = (ClientConnectToServerProtocol) sm;
 			IntroductionRequest request = new IntroductionRequest(protocol.requester.getAddress(), protocol.introducer,
 					protocol.target);
+			protocol.verbose |=  protocol.requester.checkIntroductionRequestNonce(request.nonce);
 			RequesterProtocol intro = new RequesterProtocol(protocol.requester, request, protocol.verbose);
 			intro.registerCallback(protocol);
 			intro.begin();

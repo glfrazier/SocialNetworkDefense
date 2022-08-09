@@ -43,6 +43,9 @@ public class SNDPMessageTransmissionProtocol extends StateMachine {
 	private static final long ACK_TIMEOUT = 3 * TRANSMISSION_LATENCY;
 
 	public SNDPMessageTransmissionProtocol(Node node, StateMachine protocol, SNDPMessage message, boolean verbose) {
+		// TODO this is an expensive constructor, as it is calling the toString() method
+		// on the message. Consider changing this. Or giving message a method whose
+		// expense can vary based on whether we are running verbosely or not.
 		super("SMDP MTP(" + message + ")", EventEqualityMode.CLASS_EQUALS, node.getEventingSystem());
 		this.node = node;
 		this.superProtocol = protocol;

@@ -14,15 +14,17 @@ public class SimImpl implements Implementation {
 	private SimVPNManager vpnManager;
 	private Node node;
 	private SimComms comms;
+	private final Simulation sim;
 
-	public SimImpl(ButterflyNetwork topology) {
+	public SimImpl(Simulation sim, ButterflyNetwork topology) {
+		this.sim = sim;
 		this.model = topology;
 	}
 
 	public void setNode(Node node) {
 		this.node = node;
-		comms = new SimComms(node);
-		vpnManager = new SimVPNManager(node.getEventingSystem(), comms);
+		comms = new SimComms(sim, node);
+		vpnManager = new SimVPNManager(sim, node.getEventingSystem(), comms);
 		disc = new ButterflyDiscoveryService(node.getAddress(), model, cacheSize);
 	}
 
