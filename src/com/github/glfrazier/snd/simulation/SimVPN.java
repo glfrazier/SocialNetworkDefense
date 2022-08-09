@@ -12,7 +12,6 @@ import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.MessageReceiver;
 import com.github.glfrazier.snd.protocol.SNDPMessageTransmissionProtocol;
-import com.github.glfrazier.snd.protocol.message.AckMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 

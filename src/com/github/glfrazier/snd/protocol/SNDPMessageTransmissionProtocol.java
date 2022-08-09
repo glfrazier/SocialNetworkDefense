@@ -61,6 +61,7 @@ public class SNDPMessageTransmissionProtocol extends StateMachine {
 		public void act(StateMachine sm, State s, Event e) {
 			SNDPMessageTransmissionProtocol stp = (SNDPMessageTransmissionProtocol) sm;
 			stp.node.unregisterAckWaiter(stp.message.getIdentifier());
+			stp.node.removeAllIntroductionRequestsFromVPN(stp.message.getDst());
 			if (stp.superProtocol != null) {
 				stp.superProtocol.receive(FAILURE_EVENT);
 			}

@@ -491,7 +491,7 @@ public class Node implements EventProcessor, MessageReceiver {
 		return true;
 	}
 
-	protected synchronized void removeAllIntroductionRequestsFromVPN(InetAddress nbr) {
+	public synchronized void removeAllIntroductionRequestsFromVPN(InetAddress nbr) {
 		Set<IntroductionRequest> r = introducedNeighbors.get(nbr);
 		if (r == null) {
 			return;

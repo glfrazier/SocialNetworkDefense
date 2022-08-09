@@ -49,6 +49,7 @@ public class IntroducerProtocol extends IntroductionProtocol {
 
 	};
 	private static final State decisionState = new State("decide to offer", decisionAction);
+	
 	private static final Action sendDeniedAction = new Action() {
 
 		@Override
@@ -59,6 +60,7 @@ public class IntroducerProtocol extends IntroductionProtocol {
 
 	};
 	private static final State sendDeniedState = new State("send IntroductionDeniedMessage", sendDeniedAction);
+	
 	private static final Action sendCompletionAction = new Action() {
 
 		@Override
