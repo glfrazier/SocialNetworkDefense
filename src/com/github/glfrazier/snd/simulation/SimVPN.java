@@ -90,8 +90,10 @@ public class SimVPN implements EventProcessor {
 			if (remotelyInvoked) {
 				local.vpnClosed(remoteAddress);
 			} else {
-				eventingSystem.scheduleEventRelative(remote, REMOTE_CLOSE_VPN_EVENT,
-						SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
+				if (remote != null) {
+					eventingSystem.scheduleEventRelative(remote, REMOTE_CLOSE_VPN_EVENT,
+							SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
+				}
 			}
 			closed = true;
 			remote = null;
