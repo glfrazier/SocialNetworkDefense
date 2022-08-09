@@ -37,7 +37,7 @@ public class SimVPNManager implements VPNManager {
 		// A node will close a VPN at the same time that an ACK is being sent. So, we
 		// delay the actual closing of the VPN by one time unit. This does not prevent a
 		// host from creating a new VPN to the same neighbor in the meantime.
-		eventingSystem.scheduleEventRelative(vpn, SimVPN.CLOSE_VPN_EVENT, 1);
+		eventingSystem.scheduleEventRelative(vpn, SimVPN.LOCAL_CLOSE_VPN_EVENT, 1);
 	}
 
 }

@@ -19,8 +19,7 @@ import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 import com.github.glfrazier.snd.util.DenialReporter;
 import com.github.glfrazier.snd.util.Implementation;
 
-public class ProxyNode extends Node
-{
+public class ProxyNode extends Node {
 	private InetAddress proxiedHost;
 	private InetAddress initialIntroducer;
 	private Map<IntroductionRequest, RequesterProtocol> introductionSequences = new HashMap<>();
@@ -63,10 +62,45 @@ public class ProxyNode extends Node
 
 	@Override
 	protected void processFeedback(FeedbackMessage m) {
-		super.processFeedback(m);
-//		System.out.println("Eventually, we will want to make the client aware that negative feedback has\n"
-//				+ "been received. And, if we have multiple clients we are routing,\n"
-//				+ "we may want to do a mini-reputation system here.");
+		if (m.getSrc().equals(proxiedHost)) {
+			// Our proxied host sent us feedback. It will have no introduction request
+			// (because proxied hosts know nothing about introductions). The subject of the
+			// feedback is probably another proxied host, but it *could* be a member of the
+			// network. We must obtain the introduction request by which we know the proxy
+			// for the subject of the feedback, and then construct an appropriate feedback
+			// message and send it.
+
+			// Find the network destination, as the proxied host may only know the IP
+			// address of the other proxied host in the connection
+			InetAddress subject = m.getSubject();
+			InetAddress networkSrc = implementation.getDiscoveryService().getProxyFor(subject);
+
+			// Close the VPN to the bad host!
+			if (m.getFeedback() == Feedback.BAD) {
+				removeAllIntroductionRequestsFromVPN(networkSrc);
+			}
+			
+			// Now get the introduction request
+			IntroductionRequest ir = getPendingFeedbackTo(networkSrc, getAddress());
+			if (ir == null) {
+				logger.warning(this + ": received feedback from proxied host for which there is no pending feedback.");
+				return;
+			}
+			// And build and send the feedback
+			FeedbackMessage mOut = new FeedbackMessage(ir, getAddress(), subject, m.getFeedback(), m.getTrigger());
+			send(mOut);
+			return;
+		}
+		// else
+		
+		if (m.getSubject().equals(proxiedHost)) {
+			System.out.println(this + ": Eventually, we will want to make the client aware that negative feedback has\n"
+					+ "been received. And, if we have multiple clients we are routing,\n"
+					+ "we may want to do a mini-reputation system here.");
+			return;
+		}
+		// else
+		logger.severe(this + " Received feedback that was neither from nor about its proxied host: " + m);
 	}
 
 	@Override
@@ -78,7 +112,7 @@ public class ProxyNode extends Node
 				System.out.println(this + ": the proxy for " + m.getDst() + " is " + networkDestination);
 			}
 			if (networkDestination == null) {
-				LOGGER.info(
+				logger.info(
 						this + ": discarding " + m + " because it is not in the network and does not have a proxy.");
 				return;
 			}

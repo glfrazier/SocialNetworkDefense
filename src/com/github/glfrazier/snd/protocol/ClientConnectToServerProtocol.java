@@ -69,13 +69,13 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 
 	@Override
 	public void stateMachineEnded(StateMachine machine) {
-		RequesterProtocol irProtocol = (RequesterProtocol) machine;
-		if (irProtocol.introductionSucceeded()) {
-			InetAddress newNeighbor = irProtocol.getResultingNeighbor();
+		RequesterProtocol requestProtocol = (RequesterProtocol) machine;
+		if (requestProtocol.introductionSucceeded()) {
+			InetAddress newNeighbor = requestProtocol.getResultingNeighbor();
 			// Remove the prior introduction from the link used in the prior introduction. Note that this has no impact on a-priori
 			// connections.
 			if (priorIntroduction != null) {
-				requester.removeIntroductionRequestFromVPN(priorIntroduction, irProtocol.getIntroducer());
+				requester.removeIntroductionRequestFromVPN(priorIntroduction, requestProtocol.getIntroducer());
 			}
 			if (newNeighbor.equals(target)) {
 				if (!message.getDst().equals(target)) {
@@ -85,7 +85,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 				this.receive(CONNECTED);
 			} else {
 				introducer = newNeighbor;
-				priorIntroduction = irProtocol.getIntroductionRequest();
+				priorIntroduction = requestProtocol.getIntroductionRequest();
 				depth++;
 				this.receive(NEXT_STEP);
 			}

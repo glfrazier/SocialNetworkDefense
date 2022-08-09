@@ -1,6 +1,5 @@
 package com.github.glfrazier.snd.protocol.message;
 
-import static com.github.glfrazier.snd.protocol.IntroductionRequest.SAMPLE_INTRODUCTION_REQUEST;
 import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 
 import java.io.Serializable;
@@ -23,6 +22,8 @@ public class FeedbackMessage extends IntroductionMessage implements Serializable
 
 	private InetAddress subject;
 
+	private final Message trigger;
+
 	/**
 	 * Construct Feedback for the (bad) behavior of the subject IP address.
 	 * 
@@ -32,10 +33,11 @@ public class FeedbackMessage extends IntroductionMessage implements Serializable
 	 * @param subject  The node that the feedback is about.
 	 * @param feedback The (bad) feedback.
 	 */
-	public FeedbackMessage(IntroductionRequest req, InetAddress sender, InetAddress subject, Feedback feedback) {
+	public FeedbackMessage(IntroductionRequest req, InetAddress sender, InetAddress subject, Feedback feedback, Message trigger) {
 		super(req.introducer, sender, req, MessageType.FEEDBACK);
 		this.subject = subject;
 		this.feedback = feedback;
+		this.trigger = trigger;
 	}
 
 	/**
@@ -47,10 +49,11 @@ public class FeedbackMessage extends IntroductionMessage implements Serializable
 	 * @param subject  The node that the feedback is about.
 	 * @param feedback The (bad) feedback.
 	 */
-	public FeedbackMessage(InetAddress sender, InetAddress subject, Feedback feedback) {
+	public FeedbackMessage(InetAddress sender, InetAddress subject, Feedback feedback, Message trigger) {
 		super(subject, sender, null, MessageType.FEEDBACK);
 		this.subject = subject;
 		this.feedback = feedback;
+		this.trigger = trigger;
 	}
 
 	/**
@@ -65,10 +68,11 @@ public class FeedbackMessage extends IntroductionMessage implements Serializable
 	 *                   unless the requester is proxying for other clients.
 	 * @param feedback   The feedback, which for now is always bad.
 	 */
-	public FeedbackMessage(InetAddress requester, InetAddress introducer, InetAddress subject, Feedback feedback) {
+	public FeedbackMessage(InetAddress requester, InetAddress introducer, InetAddress subject, Feedback feedback, Message trigger) {
 		super(requester, introducer, null, MessageType.FEEDBACK);
 		this.subject = subject;
 		this.feedback = feedback;
+		this.trigger = trigger;
 	}
 
 	public InetAddress getSubject() {
@@ -82,7 +86,11 @@ public class FeedbackMessage extends IntroductionMessage implements Serializable
 	@Override
 	public String toString() {
 		String result = super.toString();
-		return result + " regarding " + addrToString(getSubject());
+		return result + " regarding " + addrToString(getSubject()) + ", triggered by " + trigger;
+	}
+
+	public Message getTrigger() {
+		return trigger;
 	}
 
 }

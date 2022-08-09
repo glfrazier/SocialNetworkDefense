@@ -17,11 +17,10 @@ import com.github.glfrazier.statemachine.Transition;
 
 public class IntroducerProtocol extends IntroductionProtocol {
 
-	//private IntroductionRequestMessage introductionRequestMessage;
+	private boolean introductionSucceeded;
 
 	public IntroducerProtocol(Node target, IntroductionRequestMessage m, boolean verbose) {
 		super(target, m.getIntroductionRequest(), "Introducer Protocol", verbose);
-		//this.introductionRequestMessage = m;
 
 		setStartState(decisionState);
 		addTransition(new Transition(decisionState, FAILURE_EVENT.getClass(), sendDeniedState));
@@ -66,6 +65,7 @@ public class IntroducerProtocol extends IntroductionProtocol {
 		public void act(StateMachine sm, State s, Event e) {
 			IntroducerProtocol rrp = (IntroducerProtocol) sm;
 			IntroductionAcceptedMessage iaMsg = (IntroductionAcceptedMessage) e;
+			rrp.introductionSucceeded = true;
 			rrp.node.send(rrp, new IntroductionCompletedMessage(rrp.introductionRequest, iaMsg.getKeyingMaterial(),
 					iaMsg.getSrc()));
 		}
@@ -73,11 +73,18 @@ public class IntroducerProtocol extends IntroductionProtocol {
 	};
 	private static final State sendCompletionState = //
 			new State("send IntroductionCompletedMessage", sendCompletionAction);
+
 	private static final Action terminalAction = new Action() {
 
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
 			IntroducerProtocol rrp = (IntroducerProtocol) sm;
+			if (e instanceof IntroductionCompletedMessage) {
+				rrp.introductionSucceeded = true;
+			}
+			if (rrp.introductionSucceeded) {
+				rrp.node.addPendingFeedbackToReceive(rrp.getIntroductionRequest());
+			}
 			rrp.node.unregisterProtocol(rrp);
 		}
 

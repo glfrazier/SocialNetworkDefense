@@ -91,7 +91,7 @@ public class SNDPMessageTransmissionProtocol extends StateMachine {
 	};
 
 	private static State transmissionState = new State("transmission state", transmissionAction);
-	private static State successState = new State("success state"); // , successAction);
+	private static State successState = new State("success state", successAction);
 	private static State failureState = new State("failure state", failureAction);
 
 }

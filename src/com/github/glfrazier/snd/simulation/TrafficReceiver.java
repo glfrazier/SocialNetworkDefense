@@ -56,13 +56,13 @@ public class TrafficReceiver implements MessageReceiver {
 			stats.badMessageReceived();
 			if (random.nextFloat() > falseNegativeRate) {
 				// It was an attack and we detected the attack
-				response = new FeedbackMessage(address, m.getSrc(), Feedback.BAD);
+				response = new FeedbackMessage(address, m.getSrc(), Feedback.BAD, m);
 			}
 		} else {
 			stats.goodMessageReceived();
 			if (random.nextFloat() < falsePositiveRate) {
 				// It was not an attack, but we thought it was
-				response = new FeedbackMessage(address, m.getSrc(), Feedback.BAD);
+				response = new FeedbackMessage(address, m.getSrc(), Feedback.BAD, m);
 			}
 		}
 		if (response == null) {

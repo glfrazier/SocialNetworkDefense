@@ -24,4 +24,8 @@ public class IntroductionProtocol extends StateMachine {
 	public Node getNode() {
 		return node;
 	}
+	
+	public boolean getVerbose() {
+		return verbose;
+	}
 }

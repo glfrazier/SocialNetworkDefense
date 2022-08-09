@@ -130,13 +130,21 @@ public class TargetProtocol extends IntroductionProtocol {
 				rop.receive(GOTO_REFUSE_STATE_EVENT);
 				return;
 			}
+
+			// We are going to accept the introduction, either by reusing an existing VPN or
+			// by creating a new one. So, add this introduction request to the pending
+			// feedbacks.
+			rop.node.addPendingFeedbackToSend(rop.introductionRequest);
+
+			// Now let's see if we are re-using a VPN.
 			if (rop.node.addIntroductionRequestToVPN(rop.introductionRequest, rop.introductionRequest.requester)) {
 				rop.node.send(rop, new AddIntroductionRequestMessage(rop.introductionRequest.requester,
 						rop.node.getAddress(), rop.introductionRequest));
-				// Do not transition out of this state; wait for the outcome of the send.
+				// Do not transition out of this state; wait for the outcome of the send to
+				// dictate the next state.
 				return;
 			}
-			// Create the VPN and send the accept message
+			// ...else create the VPN and send the accept message
 			rop.receive(GOTO_CREATE_VPN);
 		}
 

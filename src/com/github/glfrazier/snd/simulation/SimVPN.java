@@ -20,8 +20,16 @@ public class SimVPN implements EventProcessor {
 
 	private static final Logger LOGGER = Logger.getLogger(SimVPN.class.getName());
 
-	static final Event CLOSE_VPN_EVENT = new Event() {
-		private static final String NAME = "CLOSE_VPN_EVENT";
+	static final Event LOCAL_CLOSE_VPN_EVENT = new Event() {
+		private static final String NAME = "LOCAL_CLOSE_VPN_EVENT";
+
+		public String toString() {
+			return NAME;
+		}
+	};
+
+	static final Event REMOTE_CLOSE_VPN_EVENT = new Event() {
+		private static final String NAME = "REMOTE_CLOSE_VPN_EVENT";
 
 		public String toString() {
 			return NAME;
@@ -41,7 +49,7 @@ public class SimVPN implements EventProcessor {
 		AddressPair key = new AddressPair(local.getAddress(), remoteAddress);
 		SimVPN prior = SimVPNManager.VPN_MAP.get(key);
 		if (prior != null) {
-			prior.close();
+			prior.close(false);
 			LOGGER.severe(this + ": being created when a duplicate already exists!");
 //			new Exception(this + ": being created when a duplicate already exists!").printStackTrace();
 //			System.exit(-1);
@@ -71,7 +79,7 @@ public class SimVPN implements EventProcessor {
 		eventingSystem.scheduleEventRelative(remote, m, SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
 	}
 
-	private void close() {
+	private void close(boolean remotelyInvoked) {
 		if (closed) {
 			return;
 		}
@@ -79,26 +87,32 @@ public class SimVPN implements EventProcessor {
 			LOGGER.fine(this + ": being closed.");
 		}
 		synchronized (this) {
-			eventingSystem.scheduleEventRelative(remote, CLOSE_VPN_EVENT,
-					SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
 			SimVPNManager.VPN_MAP.remove(new AddressPair(local.getAddress(), remoteAddress));
+			if (remotelyInvoked) {
+				local.vpnClosed(remoteAddress);
+			} else {
+				eventingSystem.scheduleEventRelative(remote, REMOTE_CLOSE_VPN_EVENT,
+						SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
+			}
 			closed = true;
 			remote = null;
 		}
-		local.vpnClosed(remoteAddress);
 	}
 
 	@Override
 	public synchronized void process(Event e, EventingSystem eventingSystem) {
 		if (closed) {
-			if (!(e instanceof AckMessage)) {
-				// Don't warn about ACKs
-				LOGGER.warning(this + ": discarding " + e + " because VPN is closed.");
-			}
+			// if (!e.equals(LOCAL_CLOSE_VPN_EVENT) && !e.equals(REMOTE_CLOSE_VPN_EVENT)) {
+			LOGGER.warning(this + ": discarding " + e + " because VPN is closed.");
+			// }
 			return;
 		}
-		if (e.equals(CLOSE_VPN_EVENT)) {
-			close();
+		if (e.equals(LOCAL_CLOSE_VPN_EVENT)) {
+			close(false);
+			return;
+		}
+		if (e.equals(REMOTE_CLOSE_VPN_EVENT)) {
+			close(true);
 			return;
 		}
 		local.receive((Message) e);
