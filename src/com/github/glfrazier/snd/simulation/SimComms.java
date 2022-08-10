@@ -93,7 +93,7 @@ public class SimComms implements CommsModule, MessageReceiver {
 			return;
 		}
 		if (msg instanceof IntroductionMessage) {
-			throw new IOException(sim.addTimePrefix(this + ": No VPN available for: " + msg));
+			throw new IOException(sim.addTimePrefix(this + ": No VPN available for: " + msg + " being sent to " + addrToString(dst)));
 		}
 		if (!msg.getDst().equals(dst)) {
 			// We're already routed this message!
