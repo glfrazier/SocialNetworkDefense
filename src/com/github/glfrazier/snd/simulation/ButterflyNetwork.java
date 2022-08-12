@@ -1,6 +1,7 @@
 package com.github.glfrazier.snd.simulation;
 
 import static com.github.glfrazier.snd.util.AddressUtils.incrementAddress;
+import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 
 import java.net.InetAddress;
 import java.util.HashMap;
@@ -21,7 +22,7 @@ public class ButterflyNetwork {
 	private NodeModel[][] matrix;
 	private Map<NodeModel, Location> locationMap;
 	private Map<InetAddress, NodeModel> addressMap;
-	private Map<InetAddress, InetAddress> serverProxyConnections = new HashMap<>();
+	private Map<InetAddress, InetAddress> proxyConnections = new HashMap<>();
 	private Map<InetAddress, InetAddress> proxies;
 
 	public ButterflyNetwork(int fanout, int height, int width, InetAddress baseAddress) {
@@ -91,20 +92,50 @@ public class ButterflyNetwork {
 
 	public Set<InetAddress> getNextStepsTo(InetAddress end, InetAddress start) {
 		Set<InetAddress> result = new HashSet<>();
-		
+
 		if (end.equals(start)) {
 			result.add(end);
 			return result;
 		}
-		InetAddress intro = serverProxyConnections.get(end);
+		InetAddress intro = null;
+		if (addressMap.containsKey(end)) {
+			intro = end; } else { intro = proxyConnections.get(end);
+		}
+		if (intro == null) {
+			System.out.println("In getNextStepsTo(), end=" + addrToString(end) + ", start=" + addrToString(start)
+					+ ", intro=null");
+		}
 		if (intro.equals(start)) {
 			result.add(end);
 			return result;
 		}
-		result = recursiveGetNextStepsTo(intro, start);
+		NodeModel node = addressMap.get(intro);
+		Location location = locationMap.get(node);
+		int lastIntroducerColumn = location.col;
+		if (lastIntroducerColumn == 0) {
+			result = recursiveGetPreviousStepsTo(intro, start);
+		} else if (lastIntroducerColumn == numColumns - 1) {
+			result = recursiveGetNextStepsTo(intro, start);
+		} else {
+			new Exception("Communicating host " + addrToString(end) + " is connected to a weird column: "
+					+ lastIntroducerColumn).printStackTrace();
+			System.exit(-1);
+		}
 		return result;
 	}
 
+	/**
+	 * The network flows from left-to-right. The end is at the right, the start is
+	 * somewhere to the left of the end. We consider the in-ports of the end, which
+	 * is how nodes to the left enter the end. If a node to the left of the end is
+	 * the start, then the end is part of the result. Otherwise, the node to the
+	 * left of the end (which can reach the end) is the new end, and we recursively
+	 * consider it.
+	 * 
+	 * @param end
+	 * @param start
+	 * @return
+	 */
 	private Set<InetAddress> recursiveGetNextStepsTo(InetAddress end, InetAddress start) {
 		Set<InetAddress> result = new HashSet<>();
 		NodeModel dstIntroducer = addressMap.get(end);
@@ -114,6 +145,33 @@ public class ButterflyNetwork {
 				result.add(end);
 			} else {
 				result.addAll(recursiveGetNextStepsTo(p.address, start));
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * The network flows from left-to-right. The end is at the left, the start is
+	 * somewhere to the right of the end. We consider the out-ports of the end,
+	 * which is how nodes to the right enter the end (we are going against the flow,
+	 * in contrast to {@link #recursiveGetNextStepsTo(InetAddress, InetAddress)}. If
+	 * a node to the right of the end is the start, then the end is part of the
+	 * result. Otherwise, the node to the right of the end (which can reach the end)
+	 * is the new end, and we recursively consider it.
+	 * 
+	 * @param end
+	 * @param start
+	 * @return
+	 */
+	private Set<InetAddress> recursiveGetPreviousStepsTo(InetAddress end, InetAddress start) {
+		Set<InetAddress> result = new HashSet<>();
+		NodeModel dstIntroducer = addressMap.get(end);
+		for (int i = 0; i < dstIntroducer.outPorts.length; i++) {
+			NodeModel p = dstIntroducer.outPorts[i];
+			if (p.address.equals(start)) {
+				result.add(end);
+			} else {
+				result.addAll(recursiveGetPreviousStepsTo(p.address, start));
 			}
 		}
 		return result;
@@ -206,15 +264,13 @@ public class ButterflyNetwork {
 		return false;
 	}
 
-	public void connectServerProxy(InetAddress serverAddress, InetAddress introAddr) {
-		serverProxyConnections.put(serverAddress, introAddr);
+	public void connectProxy(InetAddress serverAddress, InetAddress introAddr) {
+		proxyConnections.put(serverAddress, introAddr);
 	}
-	
-	
+
 	public void setProxyFor(InetAddress dst, InetAddress proxy) {
 		proxies.put(dst, proxy);
 	}
-
 
 	public InetAddress getProxyFor(InetAddress dst) {
 		if (!proxies.containsKey(dst)) {

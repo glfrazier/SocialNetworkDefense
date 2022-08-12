@@ -446,7 +446,7 @@ public class Node implements EventProcessor, MessageReceiver {
 
 	public void send(Message m) {
 		if (!m.getClass().equals(Message.class)) {
-			new Exception().printStackTrace();
+			new Exception("Being asked to send something that isn't a message!").printStackTrace();
 			System.exit(-1);
 		}
 		try {

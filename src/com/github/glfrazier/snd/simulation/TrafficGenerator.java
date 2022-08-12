@@ -5,7 +5,10 @@ import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 import java.io.IOException;
 import java.io.Serializable;
 import java.net.InetAddress;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
@@ -36,6 +39,8 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 	private Simulation sim;
 	private Statistics stats;
 	private long endTime;
+
+	private Set<MessageContent> outstandingMessages = new HashSet<>();
 
 	private boolean isAttacker;
 
@@ -84,6 +89,7 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 			return;
 		}
 		MessageContent content = (MessageContent) c;
+		outstandingMessages.remove(content);
 		if (content.isAttack) {
 			stats.responseToBadMessageReceived();
 		} else {
@@ -114,8 +120,11 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		}
 
 		// send a message
-		Message msg = new Message(mmd.destination, address, content);
-		if (sim.verbose) {
+		Message msg = new Message(mmd.destination, address, content, sim.isVerboseMessage(content.identifier));
+		if (sim.recordOutstandingMessages()) {
+			outstandingMessages.add(content);
+		}
+		if (sim.verbose || msg.isVerbose()) {
 			sim.printEvent(this + " sending " + msg);
 		}
 		try {
@@ -149,6 +158,7 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 	}
 
 	public static class MessageContent implements Serializable {
+		private static final long serialVersionUID = 1L;
 		private static final AtomicLong ID_GEN = new AtomicLong(0);
 		public final boolean isResponse;
 		public final boolean isAttack;
@@ -166,6 +176,19 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 			identifier = m.identifier;
 		}
 
+		@Override
+		public int hashCode() {
+			return Long.hashCode(identifier);
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (!(o instanceof MessageContent)) {
+				return false;
+			}
+			return ((MessageContent) o).identifier == identifier;
+		}
+
 		public String toString() {
 			return (isResponse ? "Response to " : "") + "App Msg " + identifier + (isAttack ? "(ATTACK)" : "(BENIGN)");
 		}
@@ -174,7 +197,16 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 	@Override
 	public void vpnClosed(InetAddress nbr) {
 		// TODO Auto-generated method stub
-		
+
+	}
+
+	public void printOutstandingMessages() {
+		if (!outstandingMessages.isEmpty()) {
+			System.out.println(this + " has " + outstandingMessages.size() + " outstanding messages:");
+			for (Iterator<MessageContent> iter = outstandingMessages.iterator(); iter.hasNext();) {
+				System.out.println("\t" + iter.next());
+			}
+		}
 	}
 
 }

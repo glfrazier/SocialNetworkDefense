@@ -39,12 +39,17 @@ public class SimVPN implements EventProcessor {
 	private SimVPN remote;
 	private final MessageReceiver local;
 	private final EventingSystem eventingSystem;
-	private final InetAddress remoteAddress;
+	/**
+	 * This field has package protection so that it is observable to other
+	 * simulation components.
+	 */
+	final InetAddress remoteAddress;
 	private boolean closed = false;
 
 	private final Simulation sim;
 
-	public SimVPN(Simulation sim, MessageReceiver local, InetAddress remote, EventingSystem eventingSystem) throws IllegalStateException {
+	public SimVPN(Simulation sim, MessageReceiver local, InetAddress remote, EventingSystem eventingSystem)
+			throws IllegalStateException {
 		this.sim = sim;
 		this.local = local;
 		this.remoteAddress = remote;
@@ -84,15 +89,14 @@ public class SimVPN implements EventProcessor {
 		}
 		eventingSystem.scheduleEventRelative(remote, m, SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
 	}
-	
+
 	@SuppressWarnings("serial")
 	public static class NotConnectedException extends IOException {
 
 		public NotConnectedException(String msg) {
 			super(msg);
 		}
-		
-	
+
 	}
 
 	private synchronized void close(boolean remotelyInvoked) {
@@ -117,10 +121,18 @@ public class SimVPN implements EventProcessor {
 
 	@Override
 	public synchronized void process(Event e, EventingSystem eventingSystem) {
+		Message m = null;
+		if (e instanceof Message) {
+			m = (Message) e;
+			if (m.isVerbose()) {
+				System.out.println(sim.addTimePrefix(this + ": received " + m + "; closed=" + closed));
+			}
+		}
 		if (closed) {
-			// if (!e.equals(LOCAL_CLOSE_VPN_EVENT) && !e.equals(REMOTE_CLOSE_VPN_EVENT)) {
-			LOGGER.warning(sim.addTimePrefix(this + ": discarding " + e + " because VPN is closed."));
-			// }
+			LOGGER.info(sim.addTimePrefix(this + ": discarding " + e + " because VPN is closed."));
+			if (m != null && m.isVerbose()) {
+				System.out.println(sim.addTimePrefix(this + ": discarding " + e + " because VPN is closed."));
+			}
 			return;
 		}
 		if (e.equals(LOCAL_CLOSE_VPN_EVENT)) {
@@ -131,7 +143,7 @@ public class SimVPN implements EventProcessor {
 			close(true);
 			return;
 		}
-		local.receive((Message) e);
+		local.receive(m);
 	}
 
 	@Override

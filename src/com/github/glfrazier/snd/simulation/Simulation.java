@@ -7,10 +7,12 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
@@ -35,6 +37,18 @@ public class Simulation {
 	private long endTime;
 	private TrafficReceiver[] victims;
 	public boolean verbose;
+	/**
+	 * A list of message IDs that will trigger verbose processing. Useful for
+	 * debugging weird behavior in an individual message.
+	 */
+	private Set<Long> verboseMessages;
+	/** The map whereby VPN endpoints find each other. See SimVPN. */
+	private final Map<AddressPair, SimVPN> vpnMap = Collections.synchronizedMap(new HashMap<>());
+	/**
+	 * True if we want the TrafficGenerator instances to keep track of which
+	 * messages are not responded to.
+	 */
+	private boolean recordOutstandingMessages;
 
 	public Simulation(Properties properties) throws Exception {
 		this.properties = properties;
@@ -50,8 +64,15 @@ public class Simulation {
 			properties.setProperty("snd.sim.seed", Long.toString(seed));
 		}
 		simRandom.setSeed(getLongProperty("snd.sim.seed"));
-
 		attackProb = getProbabilityProperty("snd.sim.attack_probability");
+		verboseMessages = new HashSet<Long>();
+		if (properties.containsKey("snd.sim.verbose_msg_IDs")) {
+			String[] msgIDs = getListProperty("snd.sim.verbose_msg_IDs");
+			for (String id : msgIDs) {
+				verboseMessages.add(Long.parseLong(id));
+			}
+		}
+		recordOutstandingMessages = getBooleanProperty("snd.sim.outstanding_messages", false);
 
 		// Construct the eventing system. Since this is a simulation, we are *NOT*
 		// running the EventingSystem in realtime.
@@ -59,7 +80,7 @@ public class Simulation {
 		stats = new Statistics(properties);
 		endTime = getLongProperty("snd.sim.end_time");
 		eventingSystem.setEndTime(endTime);
-		
+
 		System.out.println("Properties parsed; building the network.");
 
 		// build the introducer network
@@ -129,7 +150,7 @@ public class Simulation {
 					e.printStackTrace();
 					System.exit(-1);
 				}
-				topology.connectServerProxy(serverAddress, introAddr);
+				topology.connectProxy(serverAddress, introAddr);
 				lastServerAddress = serverAddress;
 				serverAddress = incrementAddress(serverAddress);
 				index++;
@@ -166,6 +187,7 @@ public class Simulation {
 					e.printStackTrace();
 					System.exit(-1);
 				}
+				topology.connectProxy(clientAddress, introAddr);
 				lastClientAddress = clientAddress;
 				clientAddress = incrementAddress(clientAddress);
 				index++;
@@ -216,8 +238,7 @@ public class Simulation {
 			TrafficGenerator generator = new TrafficGenerator(generatorAddress, this, eventingSystem);
 			SimVPNManager factory = new SimVPNManager(this, eventingSystem, generator);
 			factory.createVPN(proxy.getAddress(), null);
-			generator.attachToProxy(
-					this.getVpnMap().get(new AddressPair(generator.getAddress(), proxy.getAddress())));
+			generator.attachToProxy(this.getVpnMap().get(new AddressPair(generator.getAddress(), proxy.getAddress())));
 			proxy.connectProxiedHost(generatorAddress, null);
 			// Create the TrafficGenerator's entry in the proxy lookup service
 			topology.setProxyFor(generatorAddress, proxy.getAddress());
@@ -353,26 +374,28 @@ public class Simulation {
 		// TODO Auto-generated method stub
 
 	}
-	
+
 	private void addTimeReporter() {
-		
-		long SIXTY_SECONDS = 60 * 1000;
-		
+
+		final long SIXTY_SECONDS = 60 * 1000;
+		final long FIVE_MINUTES = 5 * SIXTY_SECONDS;
+
 		EventProcessor timeReporter = new EventProcessor() {
 
 			@Override
 			public void process(Event e, EventingSystem eventingSystem) {
 				printEvent(this + ": Time has passed.");
-				eventingSystem.scheduleEventRelative(this, e, SIXTY_SECONDS);
+				eventingSystem.scheduleEventRelative(this, e, FIVE_MINUTES);
 			}
-			
+
 			@Override
 			public String toString() {
 				return "Time Reporter";
 			}
-			
+
 		};
-		eventingSystem.scheduleEvent(timeReporter, new Event() {});
+		eventingSystem.scheduleEvent(timeReporter, new Event() {
+		});
 	}
 
 	public void run() {
@@ -406,12 +429,19 @@ public class Simulation {
 			System.err.println("Failed to save simulation results:");
 			e.printStackTrace();
 		}
+		if (recordOutstandingMessages) {
+			System.out.println("Examining messages lost in transit:");
+			for (TrafficGenerator tg : appClients) {
+				tg.printOutstandingMessages();
+			}
+		}
+		System.out.println("============");
 	}
 
 	public void printEvent(String msg) {
 		System.out.println(String.format("%10.3f: %s", ((float) eventingSystem.getCurrentTime()) / 1000.0, msg));
 	}
-	
+
 	public String addTimePrefix(String msg) {
 		return String.format("%10.3f: %s", ((float) eventingSystem.getCurrentTime()) / 1000.0, msg);
 	}
@@ -465,12 +495,17 @@ public class Simulation {
 	public long getEndTime() {
 		return endTime;
 	}
-	
 
-	private final Map<AddressPair, SimVPN> vpnMap = Collections.synchronizedMap(new HashMap<>());
+	public boolean isVerboseMessage(long id) {
+		return verboseMessages.contains(id);
+	}
 
-	public Map<AddressPair, SimVPN>  getVpnMap() {
+	public Map<AddressPair, SimVPN> getVpnMap() {
 		return vpnMap;
+	}
+
+	public boolean recordOutstandingMessages() {
+		return recordOutstandingMessages;
 	}
 
 }

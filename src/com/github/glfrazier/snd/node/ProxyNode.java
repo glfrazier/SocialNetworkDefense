@@ -79,7 +79,7 @@ public class ProxyNode extends Node {
 			if (m.getFeedback() == Feedback.BAD) {
 				removeAllIntroductionRequestsFromVPN(networkSrc);
 			}
-			
+
 			// Now get the introduction request
 			IntroductionRequest ir = getPendingFeedbackTo(networkSrc, getAddress());
 			if (ir == null) {
@@ -92,11 +92,11 @@ public class ProxyNode extends Node {
 			return;
 		}
 		// else
-		
+
 		if (m.getSubject().equals(proxiedHost)) {
-			System.out.println(this + ": Eventually, we will want to make the client aware that negative feedback has\n"
-					+ "been received. And, if we have multiple clients we are routing,\n"
-					+ "we may want to do a mini-reputation system here.");
+//			System.out.println(this + ": Eventually, we will want to make the client aware that negative feedback has\n"
+//					+ "been received. And, if we have multiple clients we are routing,\n"
+//					+ "we may want to do a mini-reputation system here.");
 			return;
 		}
 		// else
@@ -105,14 +105,19 @@ public class ProxyNode extends Node {
 
 	@Override
 	protected synchronized void processMessage(Message m) {
+		boolean verbose = this.verbose || m.isVerbose();
+		if (verbose) {
+			System.out.println(addTimePrefix(this + ": received " + m));
+		}
 		if (m.getSrc().equals(proxiedHost)) {
 			// The message came from the client that this node is proxying for
 			InetAddress networkDestination = implementation.getDiscoveryService().getProxyFor(m.getDst());
 			if (verbose) {
-				System.out.println(this + ": the proxy for " + m.getDst() + " is " + networkDestination);
+				System.out.println(this + ": the proxy for " + addrToString(m.getDst()) + " is "
+						+ addrToString(networkDestination));
 			}
 			if (networkDestination == null) {
-				logger.info(
+				logger.warning(
 						this + ": discarding " + m + " because it is not in the network and does not have a proxy.");
 				return;
 			}
@@ -122,11 +127,12 @@ public class ProxyNode extends Node {
 					implementation.getComms().send(m);
 					return;
 				} catch (IOException e) {
-					// ignore the failure and continue on to creating the connection
+					logger.warning(addTimePrefix(this + ": got an IOException sending <" + m
+							+ ">, because of the time delta between canSendTo() and send()"));
 				}
 			}
 			ClientConnectToServerProtocol proto = new ClientConnectToServerProtocol(this, m, networkDestination,
-					denialReporter, this.verbose);
+					denialReporter, verbose);
 			// No need to register a callback, as the protocol handles sending the message.
 			// proto.registerCallback(this);
 			proto.begin();

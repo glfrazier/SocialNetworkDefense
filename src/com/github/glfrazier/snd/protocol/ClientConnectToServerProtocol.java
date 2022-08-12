@@ -50,7 +50,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 		this.requester = node;
 		this.target = networkDestination;
 		this.denialReporter = denialReporter;
-		this.verbose = verbose;
+		this.verbose = verbose || m.isVerbose();
 		this.introducer = requester.getNextHopTo(m.getDst());
 
 		addTransition(new Transition(unconnectedState, NEXT_STEP, unconnectedState));
@@ -92,6 +92,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 			return;
 		}
 		// else
+		requester.getLogger().warning(requester.addTimePrefix(this + ": introduction denied at depth " + depth));
 		denialReporter.deniedAtDepth(depth);
 		this.receive(FAILURE);
 		return;

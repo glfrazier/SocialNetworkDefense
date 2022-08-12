@@ -87,23 +87,39 @@ public class SimComms implements CommsModule, MessageReceiver {
 	}
 
 	public synchronized void send(Message msg, InetAddress dst) throws IOException {
+		if (msg.isVerbose()) {
+			System.out.println(sim.addTimePrefix(this + ": sending " + msg + " to " + addrToString(dst)));
+		}
 		SimVPN vpn = sim.getVpnMap().get(new AddressPair(owner.getAddress(), dst));
 		if (vpn != null) {
 			vpn.send(msg);
+			if (msg.isVerbose()) {
+				System.out.println("\tsent!");
+			}
 			return;
 		}
 		if (msg instanceof IntroductionMessage) {
-			throw new IOException(sim.addTimePrefix(this + ": No VPN available for: " + msg + " being sent to " + addrToString(dst)));
+			throw new IOException(
+					sim.addTimePrefix(this + ": No VPN available for: " + msg + " being sent to " + addrToString(dst)));
 		}
 		if (!msg.getDst().equals(dst)) {
+			if (msg.isVerbose()) {
+				System.out.println("\tit has already been routed, so throw an IOException.");
+			}
 			// We're already routed this message!
 			throw new IOException(sim
 					.addTimePrefix(this + ": No route to " + addrToString(msg.getDst()) + ", trying to send " + msg));
 		}
 		InetAddress rtr = routes.get(msg.getDst());
 		if (rtr == null) {
+			if (msg.isVerbose()) {
+				System.out.println("\tthere is no route, so throw an IOException.");
+			}
 			throw new IOException(sim
 					.addTimePrefix(this + ": No route to " + addrToString(msg.getDst()) + ", trying to send " + msg));
+		}
+		if (msg.isVerbose()) {
+			System.out.println("\ttry sending it again, this time to " + rtr);
 		}
 		send(msg, rtr);
 	}
@@ -116,21 +132,37 @@ public class SimComms implements CommsModule, MessageReceiver {
 //	@Override
 //	public void process(Event e, EventingSystem eventingSystem) {
 	public void receive(Message m) {
+		boolean v = m.isVerbose();
+		if (v) {
+			System.out.println(sim.addTimePrefix(this + ": received " + m));
+		}
 		if (m.getDst().equals(owner.getAddress())) {
+			if (v) {
+				System.out.println("\tthis is the destination; pushing " + m + " to the node.");
+			}
 			owner.receive(m);
 			return;
 		}
 		if (canSendTo(m.getDst())) {
 			try {
+				if (v) {
+					System.out.println("\tinvoking send()");
+				}
 				send(m);
 			} catch (IOException e1) {
 				owner.getLogger().severe("INVARIANT VIOLATION");
 				e1.printStackTrace();
 				System.exit(-1);
 			}
+			if (v) {
+				System.out.println("\tWe were able to send " + m);
+			}
 			return;
 		}
 		// push the message up to the node, so that a route can be created for it
+		if (v) {
+			System.out.println("\tthere is no route; pusing " + m + " to the node.");
+		}
 		owner.receive(m);
 	}
 

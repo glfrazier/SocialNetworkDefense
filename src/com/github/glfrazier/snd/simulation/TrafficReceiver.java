@@ -19,7 +19,7 @@ import com.github.glfrazier.snd.simulation.TrafficGenerator.MessageContent;
 public class TrafficReceiver implements MessageReceiver {
 
 	protected static final Logger LOGGER = Logger.getLogger(TrafficReceiver.class.getName());
-	
+
 	public static final String RESPONSE_TO_BAD_MESSAGE = "This is a response to an attack message.";
 	public static final String RESPONSE_TO_GOOD_MESSAGE = "This is a response to a benign message.";
 	private float falsePositiveRate;
@@ -44,6 +44,7 @@ public class TrafficReceiver implements MessageReceiver {
 		return address;
 	}
 
+	@SuppressWarnings("serial")
 	@Override
 	public void receive(Message m) {
 		if (m instanceof AckMessage) {
@@ -51,22 +52,23 @@ public class TrafficReceiver implements MessageReceiver {
 			return;
 		}
 		Message response = null;
-		MessageContent content = (MessageContent)m.getContent();
+		MessageContent content = (MessageContent) m.getContent();
 		if (content.isAttack) {
 			stats.badMessageReceived();
 			if (random.nextFloat() > falseNegativeRate) {
 				// It was an attack and we detected the attack
-				response = new FeedbackMessage(address, m.getSrc(), Feedback.BAD, m);
+				response = new FeedbackMessage(vpnToProxy.remoteAddress, address, m.getSrc(), Feedback.BAD, m);
 			}
 		} else {
 			stats.goodMessageReceived();
 			if (random.nextFloat() < falsePositiveRate) {
 				// It was not an attack, but we thought it was
-				response = new FeedbackMessage(address, m.getSrc(), Feedback.BAD, m);
+				response = new FeedbackMessage(vpnToProxy.remoteAddress, address, m.getSrc(), Feedback.BAD, m);
 			}
 		}
 		if (response == null) {
-				response = new Message(m.getSrc(), getAddress(), new MessageContent(content));
+			response = new Message(m.getSrc(), getAddress(), new MessageContent(content),
+					sim.isVerboseMessage(content.identifier));
 		}
 		if (sim.verbose) {
 			sim.printEvent(this + " received " + m + " and is responding with " + response);
@@ -91,8 +93,7 @@ public class TrafficReceiver implements MessageReceiver {
 	@Override
 	public void vpnClosed(InetAddress nbr) {
 		// TODO Auto-generated method stub
-		
-	}
 
+	}
 
 }

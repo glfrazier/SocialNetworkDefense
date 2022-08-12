@@ -37,7 +37,7 @@ public class IntroducerProtocol extends IntroductionProtocol {
 	 */
 	public IntroducerProtocol(Node introducer, IntroductionRequestMessage m,
 			IntroductionRequest previousIntroductionRequest, boolean verbose) {
-		super(introducer, m.getIntroductionRequest(), "Introducer Protocol", verbose);
+		super(introducer, m.getIntroductionRequest(), "Introducer Protocol", verbose || m.isVerbose());
 		this.previousIntroductionRequest = previousIntroductionRequest;
 
 		setStartState(decisionState);
