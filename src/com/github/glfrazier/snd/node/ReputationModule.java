@@ -30,7 +30,7 @@ public class ReputationModule {
 	private static final float FADE_RATE = ONE_WEEK_HALF_LIFE;
 	private static final float EPSILON = 0.001f;
 
-	private static final float BAD_FEEDBACK_DECREMENT_BASE = 1;
+	private static final float BAD_FEEDBACK_DECREMENT_BASE = -1;
 	private static final float NOMINAL_FEEDBACK_INCREMENT_BASE = 0.0f;
 	private static final float GOOD_FEEDBACK_INCREMENT_BASE = 0.1f;
 	private static final float MAX_REPUTATION = 1.0f;
@@ -39,13 +39,13 @@ public class ReputationModule {
 	private ThresholdController thresholdController;
 	private final EventingSystem eventingSystem;
 
-	private final String owner;
+	private final Node owner;
 
 	public ReputationModule(EventingSystem es, Node node) {
 		this.eventingSystem = es;
 		this.userMap = Collections.synchronizedMap(new HashMap<>());
 		this.thresholdController = new ThresholdController(this, es, node);
-		this.owner = node.toString();
+		this.owner = node;
 	}
 
 //	public void feedbackReceived(Pedigree pedigree) {
@@ -160,6 +160,8 @@ public class ReputationModule {
 			adjustReputation(requests[i].introducer, dRep);
 			dRep /= 4;
 		}
+		System.out.println(owner.addTimePrefix(this + ": concerning " + addrToString(pedigree.getSubject()) + ": rep="
+				+ userMap.get(pedigree.getSubject()).reputation + ", thold=" + thresholdController.getThreshold()));
 	}
 
 	private void adjustReputation(InetAddress e, float dRep) {
@@ -235,7 +237,7 @@ public class ReputationModule {
 		public int compareTo(Entity o) {
 			return Float.compare(reputation, o.reputation);
 		}
-		
+
 		@Override
 		public String toString() {
 			return "Entity " + addrToString(identity);

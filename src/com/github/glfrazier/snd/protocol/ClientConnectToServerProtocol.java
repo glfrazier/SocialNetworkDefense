@@ -40,7 +40,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 	private IntroductionRequest priorIntroduction;
 	private DenialReporter denialReporter;
 
-	private int depth = 0;
+	private int depth = 1;
 
 	public ClientConnectToServerProtocol(ProxyNode node, Message m, InetAddress networkDestination, DenialReporter denialReporter,
 			boolean verbose) {

@@ -1,0 +1,9 @@
+snd.sim.number_of_attackers: 1
+#
+# same with number of victims and number of servers.
+#
+snd.sim.number_of_victims: 1
+#
+snd.sim.attack_probability: 0.5
+
+snd.properties_file: properties/64x3.props
