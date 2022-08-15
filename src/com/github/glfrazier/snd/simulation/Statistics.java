@@ -50,6 +50,10 @@ public class Statistics implements Serializable, DenialReporter {
 		}
 		resultsDir = subdir;
 	}
+	
+	public void zeroize() {
+		this.stats = new IndividualStatistics();
+	}
 
 	/**
 	 * Write the statistics to disk.
@@ -60,6 +64,9 @@ public class Statistics implements Serializable, DenialReporter {
 		closed = true;
 		do {
 			File f = new File(resultsDir, "properties.txt");
+			File r = new File(resultsDir, "results.txt");
+			properties.setProperty("properties.txt", f.getPath());
+			properties.setProperty("results.txt", r.getPath());
 			PrintStream out = new PrintStream(new FileOutputStream(f));
 			SortedSet<String> keys = new TreeSet<>();
 			for (Object key : properties.keySet()) {
