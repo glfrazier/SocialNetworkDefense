@@ -143,7 +143,7 @@ public class SimVPN implements EventProcessor {
 			close(true);
 			return;
 		}
-		local.receive(m);
+		eventingSystem.scheduleEvent(local, e);
 	}
 
 	@Override

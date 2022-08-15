@@ -77,7 +77,6 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		return address;
 	}
 
-	@Override
 	public void receive(Message m) {
 		if (!m.getDst().equals(address)) {
 			System.err.println("Why did " + this + " receive " + m + "!?");
@@ -102,6 +101,10 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 
 	@Override
 	public void process(Event e, EventingSystem es) {
+		if (e instanceof Message) {
+			receive((Message)e);
+			return;
+		}
 
 		if (endTime - es.getCurrentTime() < 1000) {
 			// Do not initiate a new message within one second of the end of the simulation.

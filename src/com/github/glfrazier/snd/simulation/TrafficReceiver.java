@@ -44,8 +44,7 @@ public class TrafficReceiver implements MessageReceiver {
 		return address;
 	}
 
-	@SuppressWarnings("serial")
-	@Override
+
 	public void receive(Message m) {
 		if (m instanceof AckMessage) {
 			// ignore acks!
@@ -94,6 +93,14 @@ public class TrafficReceiver implements MessageReceiver {
 	public void vpnClosed(InetAddress nbr) {
 		// TODO Auto-generated method stub
 
+	}
+
+	@Override
+	public void process(Event e, EventingSystem eventingSystem) {
+		if (e instanceof Message) {
+			receive((Message)e);
+			return;
+		}
 	}
 
 }

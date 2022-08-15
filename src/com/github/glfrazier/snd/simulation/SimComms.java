@@ -187,4 +187,11 @@ public class SimComms implements CommsModule, MessageReceiver {
 		owner.vpnClosed(nbr);
 	}
 
+	@Override
+	public void process(Event e, EventingSystem eventingSystem) {
+		if (e instanceof Message) {
+			receive((Message)e);
+		}
+	}
+
 }

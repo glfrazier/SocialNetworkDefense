@@ -2,6 +2,7 @@ package com.github.glfrazier.snd.node;
 
 import java.net.InetAddress;
 
+import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.snd.protocol.message.Message;
 
 /**
@@ -10,14 +11,7 @@ import com.github.glfrazier.snd.protocol.message.Message;
  * traffic over VPNs.
  *
  */
-public interface MessageReceiver {
-
-	/**
-	 * Receive a message.
-	 * 
-	 * @param m The message being received.
-	 */
-	public void receive(Message m);
+public interface MessageReceiver extends EventProcessor {
 
 	/**
 	 * Obtain the address of this entity.

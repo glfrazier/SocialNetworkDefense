@@ -35,6 +35,7 @@ public class Simulation {
 	private Statistics stats;
 	private float attackProb;
 	private long endTime;
+	private long warmupTime;
 	private TrafficReceiver[] victims;
 	public boolean verbose;
 	/**
@@ -76,10 +77,21 @@ public class Simulation {
 
 		// Construct the eventing system. Since this is a simulation, we are *NOT*
 		// running the EventingSystem in realtime.
-		eventingSystem = new EventingSystem(EventingSystem.NOT_REALTIME);
+		eventingSystem = new EventingSystem("EventingSystem", EventingSystem.NOT_REALTIME);
+		eventingSystem.setVerbose(verbose);
 		stats = new Statistics(properties);
 		endTime = getLongProperty("snd.sim.end_time");
+		warmupTime = getLongProperty("snd.sim.warmup_time");
 		eventingSystem.setEndTime(endTime);
+		if (warmupTime > 0) {
+			eventingSystem.scheduleEventRelative(new EventProcessor() {
+
+				@Override
+				public void process(Event e, EventingSystem eventingSystem) {
+					stats.zeroize();
+				}
+			}, Event.EVENT, warmupTime);
+		}
 
 		System.out.println("Properties parsed; building the network.");
 
@@ -334,6 +346,7 @@ public class Simulation {
 		return PropertyParser.getIPAddressProperty(propName, defaultValue, properties);
 	}
 
+	@SuppressWarnings("unused")
 	private InetAddress getIPAddressProperty(String propName) {
 		return PropertyParser.getIPAddressProperty(propName, properties);
 	}
@@ -401,7 +414,7 @@ public class Simulation {
 	public void run() {
 		addTimeReporter();
 		stats.startSimulation();
-		int numberOfThreads = getIntegerProperty("snd.number_of_threads");
+		int numberOfThreads = getIntegerProperty("snd.sim.number_of_threads");
 		Thread[] threads = new Thread[numberOfThreads];
 		for (int i = 0; i < threads.length; i++) {
 			final int thdID = i;
@@ -450,10 +463,6 @@ public class Simulation {
 		return simRandom.nextLong();
 	}
 
-	private InetAddress chooseServer() {
-		return appServers[simRandom.nextInt(appServers.length)].getAddress();
-	}
-
 	/**
 	 * This is a bit of a hack. TrafficReceiver does not have access to the eventing
 	 * system, but it does have the Simulation instance.
@@ -481,7 +490,7 @@ public class Simulation {
 	public MessageMetaData getNextMessageToSend(TrafficGenerator sender) {
 		InetAddress destination = null;
 		boolean isAttack = false;
-		if (sender.isAttacker()) {
+		if (sender.isAttacker() && !inWarmup()) {
 			isAttack = simRandom.nextFloat() < attackProb;
 		}
 		if (isAttack) {
@@ -506,6 +515,14 @@ public class Simulation {
 
 	public boolean recordOutstandingMessages() {
 		return recordOutstandingMessages;
+	}
+
+	private boolean inWarmup() {
+		return eventingSystem.getCurrentTime() < warmupTime;
+	}
+
+	public Properties getProperties() {
+		return properties;
 	}
 
 }

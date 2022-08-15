@@ -473,6 +473,7 @@ public class Node implements EventProcessor, MessageReceiver {
 
 	@Override
 	public void process(Event e, EventingSystem eventingSystem) {
+		Node thisNode = this;
 		if (e == NODE_MAINTENANCE_EVENT) {
 			Thread t = new Thread() {
 				public void run() {
@@ -499,10 +500,10 @@ public class Node implements EventProcessor, MessageReceiver {
 							iter.remove();
 						}
 					}
+					eventingSystem.scheduleEventRelative(thisNode, e, MAINTENANCE_INTERVAL);
 				}
 			};
 			t.start();
-			eventingSystem.scheduleEventRelative(this, e, MAINTENANCE_INTERVAL);
 		}
 		if (e instanceof Message) {
 			this.receive((Message) e);
