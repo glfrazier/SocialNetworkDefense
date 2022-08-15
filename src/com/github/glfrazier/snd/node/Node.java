@@ -339,6 +339,12 @@ public class Node implements EventProcessor, MessageReceiver {
 			return;
 		}
 		IntroductionRequest requesterIntroduction = null;
+//		XXXXXXXXXXXXXX
+//		Race Condition! The introduction request got here before the ACK.
+//		Solution: include the requesterIntroduction (the preceding introduction request)
+//		in the next introduction request, rather than counting on the introducer being
+//		able to find the introduction in its tables.
+//		XXXXXXXXXXXXXX
 		if (introducedNeighbors.containsKey(irIn.requester)) {
 			Set<IntroductionRequest> introductions = introducedNeighbors.get(irIn.requester);
 			for (IntroductionRequest ir : introductions) {
@@ -348,13 +354,24 @@ public class Node implements EventProcessor, MessageReceiver {
 				}
 			}
 			if (requesterIntroduction == null) {
-				StringBuffer msg = new StringBuffer(this + " INVARIANT VIOLATION in processIntroductionRequest()\n");
-				msg.append("\tInvoked in response to event " + m);
-				msg.append("\tintroductions=" + introductions);
-				logger.severe(addTimePrefix(msg.toString()));
-				new Exception().printStackTrace();
-				System.exit(-1);
+				requesterIntroduction = m.getPreviousIntroductionRequest();
+//				StringBuffer msg = new StringBuffer(this + " INVARIANT VIOLATION in processIntroductionRequest()\n");
+//				msg.append("\tInvoked in response to event " + m);
+//				msg.append("\tintroductions=" + introductions);
+//				logger.severe(addTimePrefix(msg.toString()));
+//				new Exception().printStackTrace();
+//				System.exit(-1);
 			}
+		}
+		if ((requesterIntroduction == null && (m.getPreviousIntroductionRequest() != null)) || //
+				(requesterIntroduction != null && m.getPreviousIntroductionRequest() == null)) {
+			StringBuffer msg = new StringBuffer(this + " INVARIANT VIOLATION in processIntroductionRequest()\n");
+			msg.append("\tInvoked in response to event " + m + "\n");
+			msg.append("requesterIntroduction=" + requesterIntroduction + "\n");
+			msg.append("m.getPreviousIntroductionRequest()=" + m.getPreviousIntroductionRequest() + "\n");
+			logger.severe(addTimePrefix(msg.toString()));
+			new Exception().printStackTrace();
+			System.exit(-1);
 		}
 		IntroducerProtocol protocol = new IntroducerProtocol(this, m, requesterIntroduction, verbose);
 		registeredProtocols.put(m.getIntroductionRequest(), protocol);

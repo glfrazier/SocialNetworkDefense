@@ -37,9 +37,11 @@ import com.github.glfrazier.statemachine.Transition;
 public class RequesterProtocol extends IntroductionProtocol {
 
 	private InetAddress target;
+	private IntroductionRequest prevRequest;
 
-	public RequesterProtocol(Node requester, IntroductionRequest request, boolean verbose) {
+	public RequesterProtocol(Node requester, IntroductionRequest request, IntroductionRequest prevRequest, boolean verbose) {
 		super(requester, request, "Requester Protocol", verbose);
+		this.prevRequest = prevRequest;
 		
 		setStartState(sendRequestState);
 		addTransition(new Transition(sendRequestState, FAILURE_EVENT.getClass(), failureState));
@@ -73,7 +75,7 @@ public class RequesterProtocol extends IntroductionProtocol {
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
 			RequesterProtocol irp = (RequesterProtocol) sm;
-			IntroductionRequestMessage req = new IntroductionRequestMessage(irp.introductionRequest);
+			IntroductionRequestMessage req = new IntroductionRequestMessage(irp.introductionRequest, irp.prevRequest);
 			irp.node.send(irp, req);
 		}
 	};

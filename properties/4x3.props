@@ -41,6 +41,7 @@ snd.sim.sensorFN: 0.0
 #
 snd.sim.number_of_threads: 1
 snd.sim.end_time: 2000000
+snd.sim.warmup_time: 200000
 
 #
 # Configure the threshold controller

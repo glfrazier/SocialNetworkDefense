@@ -28,9 +28,16 @@ import com.github.glfrazier.statemachine.StateMachine;
 public class IntroductionRequestMessage extends IntroductionMessage implements Serializable, Event {
 
 	private static final long serialVersionUID = 1L;
+	
+	private final IntroductionRequest previousIR;
 
-	public IntroductionRequestMessage(IntroductionRequest req) {
+	public IntroductionRequestMessage(IntroductionRequest req, IntroductionRequest previousReq) {
 		super(req.introducer, req.requester, req, MessageType.INTRODUCTION_REQUEST);
+		previousIR = previousReq;
+	}
+	
+	public IntroductionRequest getPreviousIntroductionRequest() {
+		return previousIR;
 	}
 
 }

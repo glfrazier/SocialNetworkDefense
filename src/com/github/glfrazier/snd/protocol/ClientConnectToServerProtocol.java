@@ -41,6 +41,7 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 	private DenialReporter denialReporter;
 
 	private int depth = 1;
+	protected IntroductionRequest prevRequest;
 
 	public ClientConnectToServerProtocol(ProxyNode node, Message m, InetAddress networkDestination, DenialReporter denialReporter,
 			boolean verbose) {
@@ -105,7 +106,8 @@ public class ClientConnectToServerProtocol extends StateMachine implements State
 			IntroductionRequest request = new IntroductionRequest(protocol.requester.getAddress(), protocol.introducer,
 					protocol.target);
 			protocol.verbose |=  protocol.requester.checkIntroductionRequestNonce(request.nonce);
-			RequesterProtocol intro = new RequesterProtocol(protocol.requester, request, protocol.verbose);
+			RequesterProtocol intro = new RequesterProtocol(protocol.requester, request, protocol.prevRequest, protocol.verbose);
+			protocol.prevRequest = request;
 			intro.registerCallback(protocol);
 			intro.begin();
 		}

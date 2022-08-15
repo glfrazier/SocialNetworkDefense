@@ -267,7 +267,10 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
 			TargetProtocol rop = (TargetProtocol) sm;
+<<<<<<< HEAD
 			rop.denyWasSent = true;
+=======
+>>>>>>> 0e37057 (Bug fix -- TargetProtocol was passing null as the protocol to send(proto, msg).)
 			rop.node.send(rop,
 					new IntroductionRefusedMessage(rop.introductionRequest, rop.introductionRequest.introducer));
 			rop.receive(GOTO_TERMINAL_STATE);
