@@ -10,6 +10,7 @@ import com.github.glfrazier.snd.protocol.message.IntroductionRefusedMessage;
 import com.github.glfrazier.statemachine.State;
 import com.github.glfrazier.statemachine.State.Action;
 import com.github.glfrazier.statemachine.StateMachine;
+import com.github.glfrazier.statemachine.StateMachine.StateMachineTracker;
 import com.github.glfrazier.statemachine.Transition;
 
 /**
@@ -43,7 +44,7 @@ import com.github.glfrazier.statemachine.Transition;
  * @author Greg Frazier
  *
  */
-public class TargetProtocol extends IntroductionProtocol {
+public class TargetProtocol extends IntroductionProtocol implements StateMachineTracker {
 
 	protected static final Event GOTO_REFUSE_STATE_EVENT = new Event() {
 		private static final String NAME = "goto sendRefuseState";
@@ -111,6 +112,7 @@ public class TargetProtocol extends IntroductionProtocol {
 		public void act(StateMachine sm, State state, Event event) {
 			TargetProtocol rop = (TargetProtocol) sm;
 			Pedigree p = rop.introductionOffer.getPedigree();
+
 			// validate correctness
 			if (!p.getSubject().equals(rop.introductionRequest.requester)) {
 				rop.node.getLogger().severe(
@@ -118,6 +120,7 @@ public class TargetProtocol extends IntroductionProtocol {
 				rop.receive(GOTO_REFUSE_STATE_EVENT);
 				return;
 			}
+
 			// validate correctness
 			if (!rop.introductionOffer.getSrc().equals(rop.introductionRequest.introducer)) {
 				rop.node.getLogger().severe(this + ": offer did not come from the introducer. offer="
@@ -125,6 +128,8 @@ public class TargetProtocol extends IntroductionProtocol {
 				rop.receive(GOTO_REFUSE_STATE_EVENT);
 				return;
 			}
+
+			// Make the decision
 			p = p.getNext(rop.introductionOffer.getIntroductionRequest());
 			if (!rop.node.evaluatePedigree(p)) {
 				rop.receive(GOTO_REFUSE_STATE_EVENT);
@@ -133,18 +138,19 @@ public class TargetProtocol extends IntroductionProtocol {
 
 			// We are going to accept the introduction, either by reusing an existing VPN or
 			// by creating a new one. So, add this introduction request to the pending
-			// feedbacks.
+			// feedbacks this node might send.
 			rop.node.addPendingFeedbackToSend(rop.introductionRequest);
 
 			// Now let's see if we are re-using a VPN.
 			if (rop.node.addIntroductionRequestToVPN(rop.introductionRequest, rop.introductionRequest.requester)) {
 				rop.node.send(rop, new AddIntroductionRequestMessage(rop.introductionRequest.requester,
-						rop.node.getAddress(), rop.introductionRequest));
+						rop.node.getAddress(), rop.introductionRequest), rop);
 				// Do not transition out of this state; wait for the outcome of the send to
 				// dictate the next state.
 				return;
 			}
-			// ...else create the VPN and send the accept message
+			// We are not reusing an existing VPN, so create the VPN and send the accept
+			// message
 			rop.receive(GOTO_CREATE_VPN);
 		}
 
@@ -208,7 +214,8 @@ public class TargetProtocol extends IntroductionProtocol {
 			TargetProtocol rop = (TargetProtocol) sm;
 			rop.node.send(rop,
 					//
-					// Using the IntroductionCompletedMessage constructor that is specific to the TargetProtocol.
+					// Using the IntroductionCompletedMessage constructor that is specific to the
+					// TargetProtocol.
 					//
 					new IntroductionCompletedMessage(rop.introductionRequest, rop.node.getAddress()));
 			rop.receive(GOTO_TERMINAL_STATE);
@@ -244,9 +251,19 @@ public class TargetProtocol extends IntroductionProtocol {
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
 			TargetProtocol rop = (TargetProtocol) sm;
-			rop.node.unregisterProtocol(rop);
+			rop.node.unregisterProtocol(rop, "Protocol completed @ " + rop.node.getCurrentTime());
 		}
 
 	};
 	private static State terminalState = new State("terminal state", terminalAction);
+
+	@Override
+	public void stateMachineEnded(StateMachine machine) {
+		SNDPMessageTransmissionProtocol smtp = (SNDPMessageTransmissionProtocol) machine;
+		if (smtp.succeeded()) {
+			receive(SUCCESS_EVENT);
+		} else {
+			receive(FAILURE_EVENT);
+		}
+	}
 }

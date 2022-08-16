@@ -93,7 +93,7 @@ public class RequesterProtocol extends IntroductionProtocol {
 				AddIntroductionRequestMessage airm = (AddIntroductionRequestMessage)e;
 				irp.target = airm.getSrc();
 			}
-			irp.node.unregisterProtocol(irp);
+			irp.node.unregisterProtocol(irp, "Introduction successfully completed upon receipt of " + e + " at time " + irp.node.getCurrentTime());
 		}
 	};
 
@@ -101,7 +101,7 @@ public class RequesterProtocol extends IntroductionProtocol {
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
 			RequesterProtocol irp = (RequesterProtocol) sm;
-			irp.node.unregisterProtocol(irp);
+			irp.node.unregisterProtocol(irp, "Introduction failed upon receipt of " + e + " at time " + irp.node.getCurrentTime());
 			((RequesterProtocol) sm).node.getLogger()
 					.warning(this + ": " + ((RequesterProtocol) sm).introductionRequest + " DENIED");
 		}

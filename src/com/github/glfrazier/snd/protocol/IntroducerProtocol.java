@@ -106,7 +106,7 @@ public class IntroducerProtocol extends IntroductionProtocol {
 				rrp.node.addPendingFeedbackToReceive(rrp.getIntroductionRequest(),
 						rrp.getPreviousIntroductionRequest());
 			}
-			rrp.node.unregisterProtocol(rrp);
+			rrp.node.unregisterProtocol(rrp, "Received " + e + " @ " + rrp.node.getCurrentTime());
 		}
 
 	};

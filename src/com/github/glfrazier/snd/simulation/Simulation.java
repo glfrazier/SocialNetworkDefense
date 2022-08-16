@@ -425,6 +425,26 @@ public class Simulation {
 		for (int i = 0; i < threads.length; i++) {
 			threads[i].start();
 		}
+		Thread t = new Thread("DEBUG") {
+			public void run() {
+				while(true) {
+					try {
+						Thread.sleep(30000);
+					} catch (InterruptedException e) {
+						return;
+					}
+					for(int i=0; i<threads.length; i++) {
+						StackTraceElement[] x = threads[i].getStackTrace();
+						System.out.println(threads[i].getName());
+						for(int j=0; j<x.length; j++) {
+							System.out.println("\t" + x[j].getFileName() + " @ " + x[j].getLineNumber());
+						}
+					}
+					System.out.println("===============================");
+				}
+			}
+		};
+		t.start();
 		for (int i = 0; i < threads.length; i++) {
 			try {
 				threads[i].join();

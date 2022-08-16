@@ -27,40 +27,45 @@ public class SimComms implements CommsModule, MessageReceiver {
 
 	private Map<InetAddress, InetAddress> routes;
 	private Map<InetAddress, Set<InetAddress>> routeTo;
-	// private Map<InetAddress, SimVPN> vpnMap;
 
 	private final Simulation sim;
 
 	public SimComms(Simulation sim, Node owner) {
 		this.sim = sim;
 		this.owner = owner;
-		routes = new HashMap<>();
-		routeTo = new HashMap<>();
-		// vpnMap = Collections.synchronizedMap(new HashMap<>());
+		routes = Collections.synchronizedMap(new HashMap<>());
+		routeTo = Collections.synchronizedMap(new HashMap<>());
 	}
 
 	@Override
-	public synchronized void addRoute(InetAddress dst, InetAddress route) {
+	public void addRoute(InetAddress dst, InetAddress route) {
 		routes.put(dst, route);
-		Set<InetAddress> destinations = routeTo.get(route);
-		if (destinations == null) {
-			destinations = new HashSet<>();
-			routeTo.put(route, destinations);
+		Set<InetAddress> destinations = null;
+		synchronized (routeTo) {
+			destinations = routeTo.get(route);
+			if (destinations == null) {
+				destinations = Collections.synchronizedSet(new HashSet<>());
+				routeTo.put(route, destinations);
+			}
 		}
 		destinations.add(dst);
 	}
 
 	@Override
-	public synchronized boolean removeRoute(InetAddress dst, InetAddress route) {
+	public boolean removeRoute(InetAddress dst, InetAddress route) {
 		InetAddress rte = routes.get(dst);
 		if (rte == null || !rte.equals(route)) {
 			return false;
 		}
 		routes.remove(dst);
-		Set<InetAddress> destinations = routeTo.get(route);
-		destinations.remove(dst);
-		if (destinations.isEmpty()) {
-			routeTo.remove(route);
+		synchronized (routeTo) {
+			Set<InetAddress> destinations = routeTo.get(route);
+			synchronized (destinations) {
+				destinations.remove(dst);
+				if (destinations.isEmpty()) {
+					routeTo.remove(route);
+				}
+			}
 		}
 		return true;
 	}
@@ -70,7 +75,7 @@ public class SimComms implements CommsModule, MessageReceiver {
 		return getRouteTo(dst) != null;
 	}
 
-	private synchronized InetAddress getRouteTo(InetAddress dst) {
+	private InetAddress getRouteTo(InetAddress dst) {
 		if (sim.getVpnMap().containsKey(new AddressPair(owner.getAddress(), dst))) {
 			return dst;
 		}
@@ -86,7 +91,7 @@ public class SimComms implements CommsModule, MessageReceiver {
 		send(msg, msg.getDst());
 	}
 
-	public synchronized void send(Message msg, InetAddress dst) throws IOException {
+	public void send(Message msg, InetAddress dst) throws IOException {
 		if (msg.isVerbose()) {
 			System.out.println(sim.addTimePrefix(this + ": sending " + msg + " to " + addrToString(dst)));
 		}
@@ -167,13 +172,15 @@ public class SimComms implements CommsModule, MessageReceiver {
 	}
 
 	@Override
-	public synchronized void removeRoutesVia(InetAddress route) {
+	public void removeRoutesVia(InetAddress route) {
 		Set<InetAddress> destinations = routeTo.remove(route);
 		if (destinations == null) {
 			return;
 		}
-		for (InetAddress dst : destinations) {
-			routes.remove(dst);
+		synchronized (destinations) {
+			for (InetAddress dst : destinations) {
+				routes.remove(dst);
+			}
 		}
 	}
 
@@ -190,7 +197,7 @@ public class SimComms implements CommsModule, MessageReceiver {
 	@Override
 	public void process(Event e, EventingSystem eventingSystem) {
 		if (e instanceof Message) {
-			receive((Message)e);
+			receive((Message) e);
 		}
 	}
 

@@ -59,6 +59,10 @@ public class SNDPMessageTransmissionProtocol extends StateMachine {
 		this.setStartState(transmissionState);
 	}
 
+	public boolean succeeded() {
+		return this.getCurrentState() == successState;
+	}
+
 	private static Action failureAction = new State.Action() {
 		@Override
 		public void act(StateMachine sm, State s, Event e) {

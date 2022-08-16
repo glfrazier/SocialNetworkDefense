@@ -120,7 +120,17 @@ public class Node implements EventProcessor, MessageReceiver {
 
 	private Map<Long, SNDPMessageTransmissionProtocol> ackWaiters = Collections.synchronizedMap(new HashMap<>());
 
-	private Map<IntroductionRequest, StateMachine> registeredProtocols = Collections.synchronizedMap(new HashMap<>());
+	private Map<IntroductionRequest, IntroductionProtocol> registeredProtocols = Collections
+			.synchronizedMap(new HashMap<>());
+	@SuppressWarnings("serial")
+	private Map<IntroductionRequest, String> recentlyUnregisteredProtocols = Collections
+			.synchronizedMap(new LinkedHashMap<>() {
+				private static final int MAX_ENTRIES = 100;
+
+				protected boolean removeEldestEntry(Map.Entry<IntroductionRequest, String> eldest) {
+					return size() > MAX_ENTRIES;
+				}
+			});
 
 	private Long verboseOnIntroductionRequest;
 
@@ -216,6 +226,10 @@ public class Node implements EventProcessor, MessageReceiver {
 	 */
 	public synchronized void receive(Message m) {
 		logger.fine(this + ": in node, received " + m);
+		if (m instanceof AckMessage) {
+			processAck((AckMessage) m);
+			return;
+		}
 		InetAddress from = m.getSrc();
 		if (!aprioriNeighbors.contains(from) && !introducedNeighbors.containsKey(from)) {
 			// This node is in the process of closing the VPN. Probably. So, log that we are
@@ -225,10 +239,6 @@ public class Node implements EventProcessor, MessageReceiver {
 		}
 		if (!(m instanceof SNDPMessage)) {
 			processMessage(m);
-			return;
-		}
-		if (m instanceof AckMessage) {
-			processAck((AckMessage) m);
 			return;
 		}
 		AckMessage ack = new AckMessage((IntroductionMessage) m);
@@ -251,7 +261,8 @@ public class Node implements EventProcessor, MessageReceiver {
 		case INTRODUCTION_REFUSED:
 			StateMachine protocol = registeredProtocols.get(im.getIntroductionRequest());
 			if (protocol == null) {
-				logger.severe(addTimePrefix(this + ": received " + im + " but there is no protocol for it."));
+				logger.severe(addTimePrefix(this + ": received " + im + " but there is no protocol for it. Reason:\n"
+						+ "\t" + recentlyUnregisteredProtocols.get(im.getIntroductionRequest())));
 				return;
 			}
 			protocol.receive(im);
@@ -284,8 +295,9 @@ public class Node implements EventProcessor, MessageReceiver {
 	private void processAddIntroductionRequest(AddIntroductionRequestMessage m) {
 		RequesterProtocol irp = (RequesterProtocol) registeredProtocols.get(m.getIntroductionRequest());
 		if (irp == null) {
-			logger.warning(this + ": Received " + m
-					+ ", but there is no InitiateRequestProtocol registered. This could be a natural race-condition outcome.");
+			logger.warning(addTimePrefix(this + ": Received " + m
+					+ ", but there is no InitiateRequestProtocol registered. This could be a natural race-condition outcome.\n"
+					+ "\tReason: " + recentlyUnregisteredProtocols.get(m.getIntroductionRequest())));
 			return;
 		}
 		if (!addIntroductionRequestToVPN(m.getIntroductionRequest(), m.getSrc())) {
@@ -473,6 +485,11 @@ public class Node implements EventProcessor, MessageReceiver {
 
 	@Override
 	public void process(Event e, EventingSystem eventingSystem) {
+		if (e instanceof VPNClosedEvent) {
+			InetAddress nbr = ((VPNClosedEvent) e).nbr;
+			privateVPNClosed(nbr);
+			return;
+		}
 		Node thisNode = this;
 		if (e == NODE_MAINTENANCE_EVENT) {
 			Thread t = new Thread() {
@@ -526,11 +543,37 @@ public class Node implements EventProcessor, MessageReceiver {
 	}
 
 	public synchronized void send(IntroductionProtocol protocol, IntroductionMessage message) {
+		send(protocol, message, null);
+	}
+
+	/**
+	 * Send an {@link IntroductionMessage} on behalf of the specified protocol. If
+	 * <code>callback</code> is null, the protocol will be sent
+	 * {@link StateMachine#SUCCESS_EVENT} when an {@link AckMessage} is received or
+	 * {@link StateMachine#FAILURE_EVENT} if there are no {@link AckMessage}s after
+	 * N attempts. If <code>callback</code> is not null, then the callback will be
+	 * invoked when the {@link SNDPMessageTransmissionProtocol} enters a terminal
+	 * state.
+	 * 
+	 * @param protocol the introduction protocol that is responsible for sending
+	 *                 this message
+	 * @param message  the message being sent
+	 * @param callback if non-null, this callback is invoked when the
+	 *                 {@link SNDPMessageTransmissionProtocol} enters a terminal
+	 *                 state
+	 */
+	public synchronized void send(IntroductionProtocol protocol, IntroductionMessage message,
+			StateMachine.StateMachineTracker callback) {
 		if (!registeredProtocols.containsKey(protocol.getIntroductionRequest())) {
 			registeredProtocols.put(protocol.getIntroductionRequest(), protocol);
 		}
-		SNDPMessageTransmissionProtocol stp = new SNDPMessageTransmissionProtocol(this, protocol, message,
-				protocol.getVerbose());
+		SNDPMessageTransmissionProtocol stp = null;
+		if (callback == null) {
+			stp = new SNDPMessageTransmissionProtocol(this, protocol, message, protocol.getVerbose());
+		} else {
+			stp = new SNDPMessageTransmissionProtocol(this, null, message, protocol.getVerbose());
+			stp.registerCallback(callback);
+		}
 		stp.begin();
 	}
 
@@ -646,8 +689,12 @@ public class Node implements EventProcessor, MessageReceiver {
 		return true;
 	}
 
-	public synchronized void unregisterProtocol(IntroductionProtocol proto) {
-		registeredProtocols.remove(proto.getIntroductionRequest());
+	public synchronized void unregisterProtocol(IntroductionProtocol proto, String reason) {
+		IntroductionProtocol p = registeredProtocols.remove(proto.getIntroductionRequest());
+		if (p != proto) {
+			System.out.println("We are not dealing with individual protocol instances!?");
+		}
+		recentlyUnregisteredProtocols.put(p.getIntroductionRequest(), reason);
 	}
 
 	public InetAddress getNextHopTo(InetAddress destination) {
@@ -664,7 +711,11 @@ public class Node implements EventProcessor, MessageReceiver {
 	}
 
 	@Override
-	public synchronized void vpnClosed(InetAddress nbr) {
+	public void vpnClosed(InetAddress nbr) {
+		eventingSystem.scheduleEvent(this, new VPNClosedEvent(nbr));
+	}
+
+	private synchronized void privateVPNClosed(InetAddress nbr) {
 		implementation.getComms().removeRoutesVia(nbr);
 		if (aprioriNeighbors.contains(nbr)) {
 			aprioriNeighbors.remove(nbr);
@@ -717,6 +768,18 @@ public class Node implements EventProcessor, MessageReceiver {
 			verbose = true;
 		}
 		return verbose;
+	}
+
+	private static class VPNClosedEvent implements Event {
+		public final InetAddress nbr;
+
+		public VPNClosedEvent(InetAddress nbr) {
+			this.nbr = nbr;
+		}
+	}
+
+	public long getCurrentTime() {
+		return eventingSystem.getCurrentTime();
 	}
 
 }
