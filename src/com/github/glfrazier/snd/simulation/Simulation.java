@@ -1,5 +1,6 @@
 package com.github.glfrazier.snd.simulation;
 
+import static com.github.glfrazier.snd.node.Node.TRANSMISSION_LATENCY;
 import static com.github.glfrazier.snd.util.AddressUtils.incrementAddress;
 
 import java.io.IOException;
@@ -17,6 +18,7 @@ import java.util.Set;
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
+import com.github.glfrazier.event.util.Synchronizer;
 import com.github.glfrazier.snd.node.Node;
 import com.github.glfrazier.snd.node.ProxyNode;
 import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
@@ -87,7 +89,7 @@ public class Simulation {
 			eventingSystem.scheduleEventRelative(new EventProcessor() {
 
 				@Override
-				public void process(Event e, EventingSystem eventingSystem) {
+				public void process(Event e, EventingSystem eventingSystem, long t) {
 					stats.zeroize();
 				}
 			}, Event.EVENT, warmupTime);
@@ -396,7 +398,7 @@ public class Simulation {
 		EventProcessor timeReporter = new EventProcessor() {
 
 			@Override
-			public void process(Event e, EventingSystem eventingSystem) {
+			public void process(Event e, EventingSystem eventingSystem, long t) {
 				printEvent(this + ": Time has passed.");
 				eventingSystem.scheduleEventRelative(this, e, FIVE_MINUTES);
 			}
@@ -420,31 +422,34 @@ public class Simulation {
 			final int thdID = i;
 			threads[i] = new Thread(null, eventingSystem, "Eventing System Thread " + thdID);
 		}
+		new Synchronizer(threads, TRANSMISSION_LATENCY - 2, //
+				eventingSystem);
 		System.out.println("Starting the threads. The simulation will end at time " + endTime);
 		System.out.println("===========================================");
 		for (int i = 0; i < threads.length; i++) {
 			threads[i].start();
 		}
-		Thread t = new Thread("DEBUG") {
-			public void run() {
-				while(true) {
-					try {
-						Thread.sleep(30000);
-					} catch (InterruptedException e) {
-						return;
-					}
-					for(int i=0; i<threads.length; i++) {
-						StackTraceElement[] x = threads[i].getStackTrace();
-						System.out.println(threads[i].getName());
-						for(int j=0; j<x.length; j++) {
-							System.out.println("\t" + x[j].getFileName() + " @ " + x[j].getLineNumber());
-						}
-					}
-					System.out.println("===============================");
-				}
-			}
-		};
-		t.start();
+//		Thread t = new Thread("DEBUG") {
+//			public void run() {
+//				while(true) {
+//					try {
+//						Thread.sleep(30000);
+//					} catch (InterruptedException e) {
+//						return;
+//					}
+//					for(int i=0; i<threads.length; i++) {
+//						StackTraceElement[] x = threads[i].getStackTrace();
+//						System.out.println(threads[i].getName());
+//						for(int j=0; j<x.length; j++) {
+//							System.out.println("\t" + x[j].getFileName() + " @ " + x[j].getLineNumber());
+//						}
+//					}
+//					System.out.println("===============================");
+//				}
+//			}
+//		};
+//		t.setDaemon(true);
+//		t.start();
 		for (int i = 0; i < threads.length; i++) {
 			try {
 				threads[i].join();

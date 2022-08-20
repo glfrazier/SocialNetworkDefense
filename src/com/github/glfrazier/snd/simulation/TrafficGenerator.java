@@ -100,7 +100,7 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 	}
 
 	@Override
-	public void process(Event e, EventingSystem es) {
+	public void process(Event e, EventingSystem es, long t) {
 		if (e instanceof Message) {
 			receive((Message)e);
 			return;

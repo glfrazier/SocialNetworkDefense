@@ -103,7 +103,7 @@ public class RequesterProtocol extends IntroductionProtocol {
 			RequesterProtocol irp = (RequesterProtocol) sm;
 			irp.node.unregisterProtocol(irp, "Introduction failed upon receipt of " + e + " at time " + irp.node.getCurrentTime());
 			((RequesterProtocol) sm).node.getLogger()
-					.warning(this + ": " + ((RequesterProtocol) sm).introductionRequest + " DENIED");
+					.warning(irp.node.addTimePrefix(irp + ": " + ((RequesterProtocol) sm).introductionRequest + " DENIED"));
 		}
 	};
 

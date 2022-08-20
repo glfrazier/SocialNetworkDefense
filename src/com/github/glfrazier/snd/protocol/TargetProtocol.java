@@ -70,7 +70,33 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 		}
 	};
 
+	protected static final Event ADD_SUCCEEDED_EVENT = new Event() {
+		private static final String NAME = "AddIntroductionRequest succeeded";
+
+		public String toString() {
+			return NAME;
+		}
+	};
+
+	protected static final Event ADD_FAILED_EVENT = new Event() {
+		private static final String NAME = "AddIntroductionRequest failed";
+
+		public String toString() {
+			return NAME;
+		}
+	};
+
 	private IntroductionOfferMessage introductionOffer;
+	
+	private boolean denyWasSent;
+
+	protected boolean completedWasSent;
+
+	protected boolean acceptedWasSent;
+	
+	private boolean alreadyTerminated;
+
+	protected String debugMessage;
 
 	public TargetProtocol(Node target, IntroductionOfferMessage m, boolean verbose) {
 		super(target, m.getIntroductionRequest(), "Target Protocol", verbose);
@@ -80,9 +106,9 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 		addTransition(
 				new Transition(decideToAcceptState, GOTO_REFUSE_STATE_EVENT.getClass(), sendIntroductionRefusedState));
 		// decided to accept, failed to use an existing VPN
-		addTransition(new Transition(decideToAcceptState, FAILURE_EVENT.getClass(), createVPNState));
+		addTransition(new Transition(decideToAcceptState, ADD_FAILED_EVENT.getClass(), createVPNState));
 		// decided to accept, using an existing VPN
-		addTransition(new Transition(decideToAcceptState, SUCCESS_EVENT.getClass(), sendIntroductionCompletedState));
+		addTransition(new Transition(decideToAcceptState, ADD_SUCCEEDED_EVENT.getClass(), sendIntroductionCompletedState));
 		// decided to accept, so create a VPN
 		addTransition(new Transition(decideToAcceptState, GOTO_CREATE_VPN.getClass(), createVPNState));
 
@@ -143,8 +169,13 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 
 			// Now let's see if we are re-using a VPN.
 			if (rop.node.addIntroductionRequestToVPN(rop.introductionRequest, rop.introductionRequest.requester)) {
-				rop.node.send(rop, new AddIntroductionRequestMessage(rop.introductionRequest.requester,
-						rop.node.getAddress(), rop.introductionRequest), rop);
+				AddIntroductionRequestMessage msg = new AddIntroductionRequestMessage(rop.introductionRequest.requester,
+						rop.node.getAddress(), rop.introductionRequest);
+				rop.node.send(//
+						rop, // the protocol responsible for the send
+						msg, // the message being sent
+						rop // .the callback on success (ack received) or failure to transmit
+				);
 				// Do not transition out of this state; wait for the outcome of the send to
 				// dictate the next state.
 				return;
@@ -176,6 +207,7 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 				rop.receive(GOTO_REFUSE_STATE_EVENT);
 				return;
 			}
+			rop.acceptedWasSent = true;
 			rop.node.send(rop,
 					new IntroductionAcceptedMessage(rop.introductionRequest, keyingMaterial, rop.node.getAddress()));
 			return;
@@ -212,6 +244,8 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
 			TargetProtocol rop = (TargetProtocol) sm;
+			rop.completedWasSent = true;
+			rop.debugMessage = "sendIntroductionCompletedAction -- state=" + s + ", event=" + e;
 			rop.node.send(rop,
 					//
 					// Using the IntroductionCompletedMessage constructor that is specific to the
@@ -233,7 +267,8 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
 			TargetProtocol rop = (TargetProtocol) sm;
-			rop.node.send((IntroductionProtocol) null,
+			rop.denyWasSent = true;
+			rop.node.send(rop,
 					new IntroductionRefusedMessage(rop.introductionRequest, rop.introductionRequest.introducer));
 			rop.receive(GOTO_TERMINAL_STATE);
 		}
@@ -259,11 +294,28 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 
 	@Override
 	public void stateMachineEnded(StateMachine machine) {
+		if (alreadyTerminated) {
+			System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nWe already hit a terminal state in " + machine + "!\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+			System.exit(-1);
+		}
+		alreadyTerminated = true;
+		if (acceptedWasSent) {
+			System.out.println("Accepted was sent!!");
+			System.exit(-1);
+		}
+		if (denyWasSent) {
+			System.out.println("Deny was sent!!");
+			System.exit(-1);
+		}
+		if (completedWasSent) {
+			System.out.println("Completed was sent!! " + debugMessage);
+			System.exit(-1);
+		}
 		SNDPMessageTransmissionProtocol smtp = (SNDPMessageTransmissionProtocol) machine;
 		if (smtp.succeeded()) {
-			receive(SUCCESS_EVENT);
+			receive(ADD_SUCCEEDED_EVENT);
 		} else {
-			receive(FAILURE_EVENT);
+			receive(ADD_FAILED_EVENT);
 		}
 	}
 }

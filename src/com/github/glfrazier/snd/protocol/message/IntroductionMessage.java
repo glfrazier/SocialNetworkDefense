@@ -13,6 +13,8 @@ public abstract class IntroductionMessage extends SNDPMessage {
 	private static final long serialVersionUID = 1L;
 
 	private final IntroductionRequest req;
+	
+	protected int transmissionAttempt;
 
 	public IntroductionMessage(InetAddress dst, InetAddress src, IntroductionRequest req, MessageType type) {
 		super(dst, src, type);
@@ -26,6 +28,14 @@ public abstract class IntroductionMessage extends SNDPMessage {
 	@Override
 	public String toString() {
 		return super.toString(type.toString()) + "(" + req + ")";
+	}
+	
+	public void setTransmissionAttempt(int tryNum) {
+		transmissionAttempt = tryNum;
+	}
+	
+	public int getTransmissionAttempt() {
+		return transmissionAttempt;
 	}
 
 }

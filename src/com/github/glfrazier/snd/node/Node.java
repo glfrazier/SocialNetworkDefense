@@ -46,6 +46,11 @@ import com.github.glfrazier.statemachine.StateMachine;
  */
 public class Node implements EventProcessor, MessageReceiver {
 
+	/**
+	 * This should not be a constant, per se. It should be a configurable item.
+	 */
+	public static final long TRANSMISSION_LATENCY = 10;
+
 	private final InetAddress address;
 
 	/**
@@ -484,7 +489,7 @@ public class Node implements EventProcessor, MessageReceiver {
 	}
 
 	@Override
-	public void process(Event e, EventingSystem eventingSystem) {
+	public void process(Event e, EventingSystem eventingSystem, long currentTime) {
 		if (e instanceof VPNClosedEvent) {
 			InetAddress nbr = ((VPNClosedEvent) e).nbr;
 			privateVPNClosed(nbr);

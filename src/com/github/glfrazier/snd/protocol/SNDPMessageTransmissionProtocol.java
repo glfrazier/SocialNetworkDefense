@@ -1,8 +1,11 @@
 package com.github.glfrazier.snd.protocol;
 
+import static com.github.glfrazier.snd.node.Node.TRANSMISSION_LATENCY;
+
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.snd.node.Node;
 import com.github.glfrazier.snd.protocol.message.AckMessage;
+import com.github.glfrazier.snd.protocol.message.AddIntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.SNDPMessage;
 import com.github.glfrazier.statemachine.State;
 import com.github.glfrazier.statemachine.State.Action;
@@ -39,7 +42,6 @@ public class SNDPMessageTransmissionProtocol extends StateMachine {
 	private StateMachine superProtocol;
 
 	protected static final int MAX_ATTEMPTS = 3;
-	public static final int TRANSMISSION_LATENCY = 10;
 	private static final long ACK_TIMEOUT = 3 * TRANSMISSION_LATENCY;
 
 	public SNDPMessageTransmissionProtocol(Node node, StateMachine protocol, SNDPMessage message, boolean verbose) {
@@ -52,6 +54,12 @@ public class SNDPMessageTransmissionProtocol extends StateMachine {
 		this.message = message;
 		this.verbose = verbose;
 
+		// GLF DEBUG
+		if ((message instanceof AddIntroductionRequestMessage) && (superProtocol != null)) {
+			new Exception("============================\nAddIntroductionRequest!\n++++++++++++++++++++")
+					.printStackTrace();
+			System.exit(-1);
+		}
 		this.addTransition(new Transition(transmissionState, getTimeoutEvent().getClass(), transmissionState));
 		this.addTransition(new Transition(transmissionState, AckMessage.class, successState));
 		this.addTransition(new Transition(transmissionState, FAILURE_EVENT.getClass(), failureState));
@@ -68,6 +76,9 @@ public class SNDPMessageTransmissionProtocol extends StateMachine {
 		public void act(StateMachine sm, State s, Event e) {
 			SNDPMessageTransmissionProtocol stp = (SNDPMessageTransmissionProtocol) sm;
 			stp.node.unregisterAckWaiter(stp.message.getIdentifier());
+			if (stp.verbose) {
+				System.out.println(stp.node.addTimePrefix(stp + ": closing link to " + stp.message.getDst()));
+			}
 			stp.node.removeAllIntroductionRequestsFromVPN(stp.message.getDst());
 			if (stp.superProtocol != null) {
 				stp.superProtocol.receive(FAILURE_EVENT);
@@ -91,8 +102,13 @@ public class SNDPMessageTransmissionProtocol extends StateMachine {
 			SNDPMessageTransmissionProtocol stp = (SNDPMessageTransmissionProtocol) sm;
 			if (stp.attempts >= MAX_ATTEMPTS) {
 				stp.receive(FAILURE_EVENT);
+				return;
 			}
 			stp.attempts++;
+			if (stp.verbose) {
+				System.out.println(
+						stp.node.addTimePrefix(stp + ": attempt " + stp.attempts + " at sending " + stp.message));
+			}
 			stp.node.send(stp, stp.message);
 			stp.scheduleTimeout(ACK_TIMEOUT);
 		}

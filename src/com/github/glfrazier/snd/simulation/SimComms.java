@@ -2,7 +2,11 @@ package com.github.glfrazier.snd.simulation;
 
 import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.util.Collections;
 import java.util.HashMap;
@@ -11,11 +15,9 @@ import java.util.Map;
 import java.util.Set;
 
 import com.github.glfrazier.event.Event;
-import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.MessageReceiver;
 import com.github.glfrazier.snd.node.Node;
-import com.github.glfrazier.snd.protocol.message.FeedbackMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
@@ -88,7 +90,23 @@ public class SimComms implements CommsModule, MessageReceiver {
 
 	@Override
 	public void send(Message msg) throws IOException {
-		send(msg, msg.getDst());
+		// We send a copy of the message so that the local node can modify/manipulate
+		// the message after transmission w/out affecting the message at the
+		// destination.
+		Message msgCopy = null;
+		try {
+			ByteArrayOutputStream bout = new ByteArrayOutputStream();
+			ObjectOutputStream oos = new ObjectOutputStream(bout);
+			oos.writeObject(msg);
+			oos.close();
+			ByteArrayInputStream bin = new ByteArrayInputStream(bout.toByteArray());
+			ObjectInputStream ois = new ObjectInputStream(bin);
+			msgCopy = (Message) ois.readObject();
+		} catch (Exception e) {
+			e.printStackTrace();
+			System.exit(-1);
+		}
+		send(msgCopy, msgCopy.getDst());
 	}
 
 	public void send(Message msg, InetAddress dst) throws IOException {
@@ -195,7 +213,7 @@ public class SimComms implements CommsModule, MessageReceiver {
 	}
 
 	@Override
-	public void process(Event e, EventingSystem eventingSystem) {
+	public void process(Event e, EventingSystem eventingSystem, long t) {
 		if (e instanceof Message) {
 			receive((Message) e);
 		}

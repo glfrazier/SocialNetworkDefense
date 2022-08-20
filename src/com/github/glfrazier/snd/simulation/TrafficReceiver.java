@@ -96,7 +96,7 @@ public class TrafficReceiver implements MessageReceiver {
 	}
 
 	@Override
-	public void process(Event e, EventingSystem eventingSystem) {
+	public void process(Event e, EventingSystem eventingSystem, long t) {
 		if (e instanceof Message) {
 			receive((Message)e);
 			return;

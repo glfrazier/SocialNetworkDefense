@@ -1,5 +1,6 @@
 package com.github.glfrazier.snd.simulation;
 
+import static com.github.glfrazier.snd.node.Node.TRANSMISSION_LATENCY;
 import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 import static java.util.logging.Level.FINE;
 
@@ -12,7 +13,6 @@ import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.MessageReceiver;
-import com.github.glfrazier.snd.protocol.SNDPMessageTransmissionProtocol;
 import com.github.glfrazier.snd.protocol.message.Message;
 import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 
@@ -87,7 +87,7 @@ public class SimVPN implements EventProcessor {
 		if (remote == null) {
 			throw new NotConnectedException(sim.addTimePrefix(this + ": is not yet connected, cannot send " + m));
 		}
-		eventingSystem.scheduleEventRelative(remote, m, SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
+		eventingSystem.scheduleEventRelative(remote, m, TRANSMISSION_LATENCY);
 	}
 
 	@SuppressWarnings("serial")
@@ -111,8 +111,7 @@ public class SimVPN implements EventProcessor {
 			local.vpnClosed(remoteAddress);
 		} else {
 			if (remote != null) {
-				eventingSystem.scheduleEventRelative(remote, REMOTE_CLOSE_VPN_EVENT,
-						SNDPMessageTransmissionProtocol.TRANSMISSION_LATENCY);
+				eventingSystem.scheduleEventRelative(remote, REMOTE_CLOSE_VPN_EVENT, TRANSMISSION_LATENCY);
 			}
 		}
 		closed = true;
@@ -120,7 +119,7 @@ public class SimVPN implements EventProcessor {
 	}
 
 	@Override
-	public synchronized void process(Event e, EventingSystem eventingSystem) {
+	public synchronized void process(Event e, EventingSystem eventingSystem, long t) {
 		Message m = null;
 		if (e instanceof Message) {
 			m = (Message) e;

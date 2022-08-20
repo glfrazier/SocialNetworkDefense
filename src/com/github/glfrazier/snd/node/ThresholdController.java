@@ -72,7 +72,7 @@ public class ThresholdController implements EventProcessor {
 	}
 
 	@Override
-	public void process(Event e, EventingSystem eventingSystem) {
+	public void process(Event e, EventingSystem eventingSystem, long currentTime) {
 		if (e == THRESHOLD_UPDATE_EVENT) {
 			updateThreshold();
 			eventingSystem.scheduleEventRelative(this, e, THRESHOLD_UPDATE_INTERVAL);
