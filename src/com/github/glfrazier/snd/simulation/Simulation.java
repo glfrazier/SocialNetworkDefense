@@ -52,6 +52,7 @@ public class Simulation {
 	 * messages are not responded to.
 	 */
 	private boolean recordOutstandingMessages;
+	private List<Node> introducers;
 
 	public Simulation(Properties properties) throws Exception {
 		this.properties = properties;
@@ -107,7 +108,7 @@ public class Simulation {
 			InetAddress baseAddress = InetAddress.getByName(DEFAULT_BASE_ADDRESS);
 			baseAddress = getIPAddressProperty("snd.sim.network_base_address", baseAddress.toString().substring(1));
 			topology = new ButterflyNetwork(fanout, rowsOfIntroducers, colsOfIntroducers, baseAddress);
-			List<Node> introducers = new ArrayList<>(rowsOfIntroducers * colsOfIntroducers);
+			introducers = new ArrayList<>(rowsOfIntroducers * colsOfIntroducers);
 			for (int row = 0; row < rowsOfIntroducers; row++) {
 				for (int col = 0; col < colsOfIntroducers; col++) {
 					InetAddress address = topology.getAddressOfElement(row, col);
@@ -399,7 +400,8 @@ public class Simulation {
 
 			@Override
 			public void process(Event e, EventingSystem eventingSystem, long t) {
-				printEvent(this + ": Time has passed.");
+				printEvent(this + ": Time has passed. Running the GC");
+				Runtime.getRuntime().gc();
 				eventingSystem.scheduleEventRelative(this, e, FIVE_MINUTES);
 			}
 
@@ -422,34 +424,48 @@ public class Simulation {
 			final int thdID = i;
 			threads[i] = new Thread(null, eventingSystem, "Eventing System Thread " + thdID);
 		}
-		new Synchronizer(threads, TRANSMISSION_LATENCY - 2, //
+		new Synchronizer(threads, TRANSMISSION_LATENCY - 3, //
 				eventingSystem);
 		System.out.println("Starting the threads. The simulation will end at time " + endTime);
 		System.out.println("===========================================");
 		for (int i = 0; i < threads.length; i++) {
 			threads[i].start();
 		}
-//		Thread t = new Thread("DEBUG") {
-//			public void run() {
-//				while(true) {
-//					try {
-//						Thread.sleep(30000);
-//					} catch (InterruptedException e) {
-//						return;
-//					}
-//					for(int i=0; i<threads.length; i++) {
-//						StackTraceElement[] x = threads[i].getStackTrace();
-//						System.out.println(threads[i].getName());
-//						for(int j=0; j<x.length; j++) {
-//							System.out.println("\t" + x[j].getFileName() + " @ " + x[j].getLineNumber());
-//						}
-//					}
-//					System.out.println("===============================");
-//				}
-//			}
-//		};
-//		t.setDaemon(true);
-//		t.start();
+		Thread t = new Thread("DEBUG") {
+			private long eventsDelivered;
+
+			public void run() {
+				while(true) {
+					try {
+						Thread.sleep(30000);
+					} catch (InterruptedException e) {
+						return;
+					}
+					for(int i=0; i<threads.length; i++) {
+						StackTraceElement[] x = threads[i].getStackTrace();
+						System.out.println(threads[i].getName());
+						for(int j=0; j<x.length; j++) {
+							System.out.println("\t" + x[j].getFileName() + " @ " + x[j].getLineNumber());
+						}
+					}
+					long irSize = 0;
+					for(Node n : introducers) {
+						irSize += n.getPendingFeedbacksSize();
+					}
+					System.out.println("Free Memory = " + Runtime.getRuntime().freeMemory());
+					System.out.println("Total Memory = " + Runtime.getRuntime().totalMemory());
+					System.out.println("vpnMap.size() = " + vpnMap.size());
+					long ted = eventingSystem.getTotalEventsDelivered();
+					System.out.println("#events processed = " + ted);
+					System.out.println("events in this period = " + (ted - eventsDelivered));
+					System.out.println("Pending Feedbacks = " + irSize);
+					eventsDelivered = ted;
+					System.out.println("===============================");
+				}
+			}
+		};
+		t.setDaemon(true);
+		t.start();
 		for (int i = 0; i < threads.length; i++) {
 			try {
 				threads[i].join();

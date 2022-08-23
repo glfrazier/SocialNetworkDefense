@@ -20,6 +20,7 @@ public class Optimizer {
 			"snd.thold_ctlr.tau_i", //
 			"snd.thold_ctlr.tau_t"//
 	};
+	private static final boolean[] PROBABILITY_PROPERTIES = { true, false, true, false, false };
 	private Map<Properties, Float> props;
 	private Properties bestProps;
 	private float bestScore;
@@ -117,13 +118,10 @@ public class Optimizer {
 		candidate.clear();
 		String changedProp = CHANGING_PROPERTIES[random.nextInt(CHANGING_PROPERTIES.length)];
 		float value = Float.parseFloat(baseProps.getProperty(changedProp));
-		value = adjustValue(value);
 		if (isPropbabilityProperty(changedProp)) {
-			if (value > 1 - 10e-5f) {
-				value = 1 - 10e-5f;
-			} else if (value < 10e-5f) {
-				value = 10e-5f;
-			}
+			value = adjustProbability(value);
+		} else {
+			value = adjustValue(value);
 		}
 		candidate.putAll(baseProps);
 		candidate.setProperty(changedProp, Float.toString(value));
@@ -131,12 +129,25 @@ public class Optimizer {
 	}
 
 	private boolean isPropbabilityProperty(String prop) {
-		return prop.equals(CHANGING_PROPERTIES[0]) || prop.equals(CHANGING_PROPERTIES[2]);
+		for (int i = 0; i < CHANGING_PROPERTIES.length; i++) {
+			if (CHANGING_PROPERTIES[i].equals(prop)) {
+				return PROBABILITY_PROPERTIES[i];
+			}
+		}
+		throw new IllegalArgumentException("<" + prop + "> is not the name of a CHANGING_PROPERTY.");
 	}
 
 	private float adjustValue(float value) {
 		float dir = random.nextBoolean() ? 1 : -1;
 		return value + dir * 0.01f * value;
+	}
+
+	private float adjustProbability(float prob) {
+		if (random.nextBoolean()) {
+			return prob + (1 - prob) * 0.25f;
+		}
+		// else
+		return prob * 0.9f;
 	}
 
 	private float calculateScore(Properties results) {

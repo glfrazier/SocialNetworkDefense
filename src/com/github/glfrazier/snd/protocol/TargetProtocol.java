@@ -1,5 +1,7 @@
 package com.github.glfrazier.snd.protocol;
 
+import java.io.Serializable;
+
 import com.github.glfrazier.event.Event;
 import com.github.glfrazier.snd.node.Node;
 import com.github.glfrazier.snd.protocol.message.AddIntroductionRequestMessage;
@@ -87,13 +89,13 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 	};
 
 	private IntroductionOfferMessage introductionOffer;
-	
+
 	private boolean denyWasSent;
 
 	protected boolean completedWasSent;
 
 	protected boolean acceptedWasSent;
-	
+
 	private boolean alreadyTerminated;
 
 	protected String debugMessage;
@@ -108,7 +110,8 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 		// decided to accept, failed to use an existing VPN
 		addTransition(new Transition(decideToAcceptState, ADD_FAILED_EVENT.getClass(), createVPNState));
 		// decided to accept, using an existing VPN
-		addTransition(new Transition(decideToAcceptState, ADD_SUCCEEDED_EVENT.getClass(), sendIntroductionCompletedState));
+		addTransition(
+				new Transition(decideToAcceptState, ADD_SUCCEEDED_EVENT.getClass(), sendIntroductionCompletedState));
 		// decided to accept, so create a VPN
 		addTransition(new Transition(decideToAcceptState, GOTO_CREATE_VPN.getClass(), createVPNState));
 
@@ -200,7 +203,7 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
 			TargetProtocol rop = (TargetProtocol) sm;
-			Object keyingMaterial = rop.node.generateKeyingMaterial();
+			Serializable keyingMaterial = rop.node.generateKeyingMaterial();
 			boolean success = rop.node.createVPN(rop.introductionRequest.requester, rop.introductionRequest,
 					keyingMaterial);
 			if (!success) {
@@ -268,8 +271,9 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 		public void act(StateMachine sm, State s, Event e) {
 			TargetProtocol rop = (TargetProtocol) sm;
 			rop.denyWasSent = true;
-			rop.node.send(rop,
-					new IntroductionRefusedMessage(rop.introductionRequest, rop.introductionRequest.introducer));
+			IntroductionRefusedMessage refusal = new IntroductionRefusedMessage(rop.introductionRequest,
+					rop.node.getAddress());
+			rop.node.send(rop, refusal);
 			rop.receive(GOTO_TERMINAL_STATE);
 		}
 
@@ -295,7 +299,8 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 	@Override
 	public void stateMachineEnded(StateMachine machine) {
 		if (alreadyTerminated) {
-			System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nWe already hit a terminal state in " + machine + "!\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+			System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nWe already hit a terminal state in " + machine
+					+ "!\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 			System.exit(-1);
 		}
 		alreadyTerminated = true;

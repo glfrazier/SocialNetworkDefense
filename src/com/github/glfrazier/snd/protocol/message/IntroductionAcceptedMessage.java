@@ -10,14 +10,14 @@ public class IntroductionAcceptedMessage extends IntroductionMessage implements 
 
 	private static final long serialVersionUID = 1L;
 	
-	protected final Object keyingMaterial;
+	protected final Serializable keyingMaterial;
 
-	public IntroductionAcceptedMessage(IntroductionRequest req, Object keyingMaterial, InetAddress target) {
+	public IntroductionAcceptedMessage(IntroductionRequest req, Serializable keyingMaterial, InetAddress target) {
 		super(req.introducer, target, req, MessageType.INTRODUCTION_ACCEPTED);
 		this.keyingMaterial = keyingMaterial;
 	}
 	
-	public Object getKeyingMaterial() {
+	public Serializable getKeyingMaterial() {
 		return keyingMaterial;
 	}
 

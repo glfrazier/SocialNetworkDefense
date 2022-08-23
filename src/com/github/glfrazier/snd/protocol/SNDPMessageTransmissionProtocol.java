@@ -42,7 +42,7 @@ public class SNDPMessageTransmissionProtocol extends StateMachine {
 	private StateMachine superProtocol;
 
 	protected static final int MAX_ATTEMPTS = 3;
-	private static final long ACK_TIMEOUT = 3 * TRANSMISSION_LATENCY;
+	private static final long ACK_TIMEOUT = 5 * TRANSMISSION_LATENCY + 1;
 
 	public SNDPMessageTransmissionProtocol(Node node, StateMachine protocol, SNDPMessage message, boolean verbose) {
 		// TODO this is an expensive constructor, as it is calling the toString() method

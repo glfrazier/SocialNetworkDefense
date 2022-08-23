@@ -18,8 +18,12 @@ import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.MessageReceiver;
 import com.github.glfrazier.snd.node.Node;
+import com.github.glfrazier.snd.protocol.message.IntroductionAcceptedMessage;
 import com.github.glfrazier.snd.protocol.message.IntroductionMessage;
+import com.github.glfrazier.snd.protocol.message.IntroductionOfferMessage;
+import com.github.glfrazier.snd.protocol.message.IntroductionRefusedMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
+import com.github.glfrazier.snd.protocol.message.SNDPMessage;
 import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 import com.github.glfrazier.snd.util.CommsModule;
 
@@ -103,6 +107,7 @@ public class SimComms implements CommsModule, MessageReceiver {
 			ObjectInputStream ois = new ObjectInputStream(bin);
 			msgCopy = (Message) ois.readObject();
 		} catch (Exception e) {
+			System.err.println("Sending message: " + msg);
 			e.printStackTrace();
 			System.exit(-1);
 		}
@@ -110,6 +115,16 @@ public class SimComms implements CommsModule, MessageReceiver {
 	}
 
 	public void send(Message msg, InetAddress dst) throws IOException {
+		if (dst.equals(owner.getAddress())) {
+			System.err.println("#1 Why are we sending a message to ourselves!? msg=" + msg);
+			new Exception().printStackTrace();
+			System.exit(-1);
+		}
+		if (msg.getDst().equals(msg.getSrc())) {
+			System.err.println("#2 Why are we sending a message with dst==src!? msg=" + msg);
+			new Exception().printStackTrace();
+			System.exit(-1);
+		}
 		if (msg.isVerbose()) {
 			System.out.println(sim.addTimePrefix(this + ": sending " + msg + " to " + addrToString(dst)));
 		}
@@ -166,21 +181,26 @@ public class SimComms implements CommsModule, MessageReceiver {
 			owner.receive(m);
 			return;
 		}
-		if (canSendTo(m.getDst())) {
-			try {
-				if (v) {
-					System.out.println("\tinvoking send()");
-				}
-				send(m);
-			} catch (IOException e1) {
-				owner.getLogger().severe("INVARIANT VIOLATION");
-				e1.printStackTrace();
-				System.exit(-1);
+		try {
+			if (v) {
+				System.out.println("\tinvoking send()");
 			}
+			send(m);
 			if (v) {
 				System.out.println("\tWe were able to send " + m);
 			}
 			return;
+		} catch (IOException e1) {
+			if (m instanceof SNDPMessage) {
+				if (m instanceof IntroductionRefusedMessage || m instanceof IntroductionAcceptedMessage
+						|| m instanceof IntroductionOfferMessage) {
+					System.err.println(
+							"INVARIANT VIOLATION! Messages of this type should only be sent on a-priori links! m=" + m);
+					System.exit(-1);
+				}
+				// We drop SND Protocol messages that cannot be sent
+				return;
+			}
 		}
 		// push the message up to the node, so that a route can be created for it
 		if (v) {

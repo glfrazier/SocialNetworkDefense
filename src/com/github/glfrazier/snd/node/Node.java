@@ -4,6 +4,7 @@ import static com.github.glfrazier.snd.util.AddressUtils.addrToString;
 import static java.util.logging.Level.FINE;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.net.InetAddress;
 import java.util.Collections;
 import java.util.HashMap;
@@ -115,7 +116,8 @@ public class Node implements EventProcessor, MessageReceiver {
 	 * introduction.
 	 */
 	// TODO These constants should all be set by properties!
-	protected static final long FEEDBACK_EXPIRATION_TIME = 8 * 60 * 60 * 1000; // eight hours (why?)
+	protected static final long FEEDBACK_EXPIRATION_TIME = // 8 * 60 * 
+			60 * 1000; // one minute
 	private static final long MAINTENANCE_INTERVAL = FEEDBACK_EXPIRATION_TIME / 100;
 	private static final int MAX_INTRODUCED_NEIGHBORS = 100;
 
@@ -240,6 +242,10 @@ public class Node implements EventProcessor, MessageReceiver {
 			// This node is in the process of closing the VPN. Probably. So, log that we are
 			// dropping this message, and then drop it.
 			logger.warning(addTimePrefix(this + ": received <" + m + "> on a VPN that does not exist. Ignoring it."));
+			if (from.equals(address)) {
+				new Exception("We sent " + m + " to ourselves!").printStackTrace();
+				System.exit(-1);
+			}
 			return;
 		}
 		if (!(m instanceof SNDPMessage)) {
@@ -661,13 +667,9 @@ public class Node implements EventProcessor, MessageReceiver {
 		implementation.getComms().removeRoutesVia(nbr);
 	}
 
-	public Object generateKeyingMaterial() {
+	public Serializable generateKeyingMaterial() {
 		// TODO Auto-generated method stub
-		return new Object() {
-			public String toString() {
-				return "keying material";
-			}
-		};
+		return "keying material";
 	}
 
 	public synchronized void createVPN(InetAddress nbr, Object keyingMaterial) throws IOException {
@@ -802,6 +804,10 @@ public class Node implements EventProcessor, MessageReceiver {
 
 	public long getCurrentTime() {
 		return eventingSystem.getCurrentTime();
+	}
+
+	public long getPendingFeedbacksSize() {
+		return pendingFeedbacksToReceive.size() + pendingFeedbacksToSend.size();
 	}
 
 }

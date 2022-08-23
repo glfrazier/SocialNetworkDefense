@@ -39,10 +39,11 @@ public class RequesterProtocol extends IntroductionProtocol {
 	private InetAddress target;
 	private IntroductionRequest prevRequest;
 
-	public RequesterProtocol(Node requester, IntroductionRequest request, IntroductionRequest prevRequest, boolean verbose) {
+	public RequesterProtocol(Node requester, IntroductionRequest request, IntroductionRequest prevRequest,
+			boolean verbose) {
 		super(requester, request, "Requester Protocol", verbose);
 		this.prevRequest = prevRequest;
-		
+
 		setStartState(sendRequestState);
 		addTransition(new Transition(sendRequestState, FAILURE_EVENT.getClass(), failureState));
 		addTransition(new Transition(sendRequestState, IntroductionDeniedMessage.class, failureState));
@@ -92,10 +93,11 @@ public class RequesterProtocol extends IntroductionProtocol {
 				irp.node.createVPN(irp.target, irp.introductionRequest, keyingMaterial);
 			}
 			if (e instanceof AddIntroductionRequestMessage) {
-				AddIntroductionRequestMessage airm = (AddIntroductionRequestMessage)e;
+				AddIntroductionRequestMessage airm = (AddIntroductionRequestMessage) e;
 				irp.target = airm.getSrc();
 			}
-			irp.node.unregisterProtocol(irp, "Introduction successfully completed upon receipt of " + e + " at time " + irp.node.getCurrentTime());
+			irp.node.unregisterProtocol(irp, "Introduction successfully completed upon receipt of " + e + " at time "
+					+ irp.node.getCurrentTime());
 		}
 	};
 
@@ -103,9 +105,12 @@ public class RequesterProtocol extends IntroductionProtocol {
 		@Override
 		public void act(StateMachine sm, State s, Event e) {
 			RequesterProtocol irp = (RequesterProtocol) sm;
-			irp.node.unregisterProtocol(irp, "Introduction failed upon receipt of " + e + " at time " + irp.node.getCurrentTime());
-			((RequesterProtocol) sm).node.getLogger()
-					.warning(irp.node.addTimePrefix(irp + ": " + ((RequesterProtocol) sm).introductionRequest + " DENIED"));
+			// This should be un-commented in real life. But perhaps we need something
+			// stronger than simply a log message?
+			irp.node.unregisterProtocol(irp,
+					"Introduction failed upon receipt of " + e + " at time " + irp.node.getCurrentTime());
+//			((RequesterProtocol) sm).node.getLogger()
+//					.warning(irp.node.addTimePrefix(irp + ": " + ((RequesterProtocol) sm).introductionRequest + " DENIED"));
 		}
 	};
 
