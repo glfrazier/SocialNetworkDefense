@@ -36,9 +36,12 @@ public class SimComms implements CommsModule, MessageReceiver {
 
 	private final Simulation sim;
 
+	private Map<InetAddress, SimVPN> vpnMap;
+
 	public SimComms(Simulation sim, Node owner) {
 		this.sim = sim;
 		this.owner = owner;
+		this.vpnMap = sim.getVpnMap(owner.getAddress());
 		routes = Collections.synchronizedMap(new HashMap<>());
 		routeTo = Collections.synchronizedMap(new HashMap<>());
 	}
@@ -82,7 +85,7 @@ public class SimComms implements CommsModule, MessageReceiver {
 	}
 
 	private InetAddress getRouteTo(InetAddress dst) {
-		if (sim.getVpnMap().containsKey(new AddressPair(owner.getAddress(), dst))) {
+		if (vpnMap.containsKey(dst)) {
 			return dst;
 		}
 		InetAddress route = routes.get(dst);
@@ -97,20 +100,20 @@ public class SimComms implements CommsModule, MessageReceiver {
 		// We send a copy of the message so that the local node can modify/manipulate
 		// the message after transmission w/out affecting the message at the
 		// destination.
-		Message msgCopy = null;
-		try {
-			ByteArrayOutputStream bout = new ByteArrayOutputStream();
-			ObjectOutputStream oos = new ObjectOutputStream(bout);
-			oos.writeObject(msg);
-			oos.close();
-			ByteArrayInputStream bin = new ByteArrayInputStream(bout.toByteArray());
-			ObjectInputStream ois = new ObjectInputStream(bin);
-			msgCopy = (Message) ois.readObject();
-		} catch (Exception e) {
-			System.err.println("Sending message: " + msg);
-			e.printStackTrace();
-			System.exit(-1);
-		}
+		Message msgCopy = msg;
+//		try {
+//			ByteArrayOutputStream bout = new ByteArrayOutputStream();
+//			ObjectOutputStream oos = new ObjectOutputStream(bout);
+//			oos.writeObject(msg);
+//			oos.close();
+//			ByteArrayInputStream bin = new ByteArrayInputStream(bout.toByteArray());
+//			ObjectInputStream ois = new ObjectInputStream(bin);
+//			msgCopy = (Message) ois.readObject();
+//		} catch (Exception e) {
+//			System.err.println("Sending message: " + msg);
+//			e.printStackTrace();
+//			System.exit(-1);
+//		}
 		send(msgCopy, msgCopy.getDst());
 	}
 
@@ -128,7 +131,7 @@ public class SimComms implements CommsModule, MessageReceiver {
 		if (msg.isVerbose()) {
 			System.out.println(sim.addTimePrefix(this + ": sending " + msg + " to " + addrToString(dst)));
 		}
-		SimVPN vpn = sim.getVpnMap().get(new AddressPair(owner.getAddress(), dst));
+		SimVPN vpn = vpnMap.get(dst);
 		if (vpn != null) {
 			vpn.send(msg);
 			if (msg.isVerbose()) {

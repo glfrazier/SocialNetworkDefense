@@ -41,13 +41,15 @@ public class ButterflyDiscoveryService implements DiscoveryService {
 	}
 
 	@Override
-	public synchronized InetAddress getNextHopTo(Query query) {
+	public InetAddress getNextHopTo(Query query) {
 		DQuery dq = (DQuery) query;
-		if (cache.containsKey(dq.dst)) {
-			InetAddress candidate = cache.get(dq.dst);
-			if (!dq.priorAnswers.contains(candidate)) {
-				dq.priorAnswers.add(candidate);
-				return candidate;
+		synchronized (cache) {
+			if (cache.containsKey(dq.dst)) {
+				InetAddress candidate = cache.get(dq.dst);
+				if (!dq.priorAnswers.contains(candidate)) {
+					dq.priorAnswers.add(candidate);
+					return candidate;
+				}
 			}
 		}
 		Set<InetAddress> candidates = networkModel.getNextStepsTo(dq.dst, here);
@@ -55,7 +57,9 @@ public class ButterflyDiscoveryService implements DiscoveryService {
 		for (InetAddress addr : candidates) {
 			if (!dq.priorAnswers.contains(addr)) {
 				dq.priorAnswers.add(addr);
-				cache.put(dq.dst, addr);
+				synchronized (cache) {
+					cache.put(dq.dst, addr);
+				}
 				return addr;
 			}
 		}

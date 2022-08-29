@@ -28,6 +28,8 @@ public class Statistics implements Serializable, DenialReporter {
 	private boolean closed;
 	private boolean opened;
 
+	private long startTime;
+
 	public Statistics(Properties props) {
 		this.stats = new IndividualStatistics();
 		initialize(props);
@@ -62,6 +64,7 @@ public class Statistics implements Serializable, DenialReporter {
 	 */
 	public synchronized void save(Properties properties) throws IOException {
 		closed = true;
+		long endTime = System.currentTimeMillis();
 		do {
 			File f = new File(resultsDir, "properties.txt");
 			File r = new File(resultsDir, "results.txt");
@@ -90,6 +93,7 @@ public class Statistics implements Serializable, DenialReporter {
 			}
 		}
 		Map<String, Long> results = new HashMap<>();
+		results.put("execution_time_ms", endTime - startTime);
 		try {
 			Field[] fields = IndividualStatistics.class.getDeclaredFields();
 			for (Field field : fields) {
@@ -162,6 +166,7 @@ public class Statistics implements Serializable, DenialReporter {
 	 */
 	public synchronized void startSimulation() {
 		opened = true;
+		startTime = System.currentTimeMillis();
 	}
 
 	private void check() {

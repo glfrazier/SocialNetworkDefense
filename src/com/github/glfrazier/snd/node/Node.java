@@ -38,7 +38,6 @@ import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 import com.github.glfrazier.snd.util.DiscoveryService.Query;
 import com.github.glfrazier.snd.util.Implementation;
 import com.github.glfrazier.snd.util.PropertyParser;
-import com.github.glfrazier.snd.util.TimeAndIntroductionRequest;
 import com.github.glfrazier.statemachine.StateMachine;
 
 /**
@@ -66,8 +65,7 @@ public class Node implements EventProcessor, MessageReceiver {
 	 * accepted and the IntroductionRequest. After a suitable timeout (24 hrs?), the
 	 * entry is discarded.
 	 */
-	protected Map<AddressPair, TimeAndIntroductionRequest> pendingFeedbacksToSend = Collections
-			.synchronizedMap(new LinkedHashMap<>());
+	private Map<AddressPair, IntroductionRequest> pendingFeedbacksToSend[];
 
 	/**
 	 * The keys of this Map are the introduction requests that we have offered and
@@ -79,8 +77,9 @@ public class Node implements EventProcessor, MessageReceiver {
 	 * timestamp is used to clean out old entries (see
 	 * {@link #FEEDBACK_EXPIRATION_TIME}).
 	 */
-	private Map<IntroductionRequest, TimeAndIntroductionRequest> pendingFeedbacksToReceive = Collections
-			.synchronizedMap(new HashMap<>());
+	private Map<IntroductionRequest, IntroductionRequest> pendingFeedbacksToReceive[];
+
+	private int currentPendingFeedbacks = 0;
 
 	/**
 	 * The nodes to which this node has VPN connections that existed before any
@@ -116,7 +115,7 @@ public class Node implements EventProcessor, MessageReceiver {
 	 * introduction.
 	 */
 	// TODO These constants should all be set by properties!
-	protected static final long FEEDBACK_EXPIRATION_TIME = // 8 * 60 * 
+	protected static final long FEEDBACK_EXPIRATION_TIME = // 8 * 60 *
 			60 * 1000; // one minute
 	private static final long MAINTENANCE_INTERVAL = FEEDBACK_EXPIRATION_TIME / 100;
 	private static final int MAX_INTRODUCED_NEIGHBORS = 100;
@@ -155,6 +154,13 @@ public class Node implements EventProcessor, MessageReceiver {
 		this.introducedNeighbors = new LinkedHashMap<>();
 
 		this.verbose = getBooleanProperty("snd.node.verbose", "false");
+
+		this.pendingFeedbacksToReceive = new Map[(int) (FEEDBACK_EXPIRATION_TIME / MAINTENANCE_INTERVAL) + 1];
+		this.pendingFeedbacksToSend = new Map[(int) (FEEDBACK_EXPIRATION_TIME / MAINTENANCE_INTERVAL) + 1];
+		for (int i = 0; i < pendingFeedbacksToReceive.length; i++) {
+			pendingFeedbacksToReceive[i] = Collections.synchronizedMap(new HashMap<>());
+			pendingFeedbacksToSend[i] = Collections.synchronizedMap(new HashMap<>());
+		}
 
 		if (properties.containsKey("snd.sim.verbose_on_IR")) {
 			verboseOnIntroductionRequest = getLongProperty("snd.sim.verbose_on_IR");
@@ -233,6 +239,9 @@ public class Node implements EventProcessor, MessageReceiver {
 	 */
 	public synchronized void receive(Message m) {
 		logger.fine(this + ": in node, received " + m);
+		// Process the ACK even if it arrives on a VPN the node believes to be closed.
+		// This makes the system more efficient in the face of out-of-order packet
+		// deliveries.
 		if (m instanceof AckMessage) {
 			processAck((AckMessage) m);
 			return;
@@ -413,6 +422,26 @@ public class Node implements EventProcessor, MessageReceiver {
 		return reputationModule.reputationIsGreaterThanThreshold(p, verbose);
 	}
 
+	private IntroductionRequest removePendingFeedbacksToReceive(IntroductionRequest ir)
+			throws IllegalArgumentException {
+		for (int i = 0; i < pendingFeedbacksToReceive.length; i++) {
+			if (pendingFeedbacksToReceive[i].containsKey(ir)) {
+				return pendingFeedbacksToReceive[i].remove(ir);
+			}
+		}
+		throw new IllegalArgumentException();
+	}
+
+	private boolean pendingFeedbacksToSendContainsKey(AddressPair srcDst) {
+		for (int i = 0; i < pendingFeedbacksToSend.length; i++) {
+			if (pendingFeedbacksToSend[i].containsKey(srcDst)) {
+				pendingFeedbacksToSend[i].remove(srcDst);
+				return true;
+			}
+		}
+		return false;
+	}
+
 	protected void processFeedback(FeedbackMessage m) {
 		if (logger.isLoggable(FINE)) {
 			logger.fine(this + " received " + m);
@@ -422,39 +451,33 @@ public class Node implements EventProcessor, MessageReceiver {
 			removeAllIntroductionRequestsFromVPN(introductionRequest.requester);
 		}
 		logger.finest(this + ": the feedback regards " + introductionRequest);
-		if (!pendingFeedbacksToReceive.containsKey(introductionRequest)) {
-			System.err.println(this + " has " + pendingFeedbacksToReceive.size() + " pending feedbacks; "
-					+ introductionRequest + " is not one of them.");
-			System.err.println(this + ": " + pendingFeedbacksToReceive.keySet());
+		if (!pendingFeedbacksToReceive[0].containsKey(introductionRequest)) {
+		}
+		Pedigree pedigree = getPedigree(introductionRequest.requester);
+		if (pedigree == null) { // TODO should we manufacture an introducer-less pedigree?
+			logger.warning(this + ": Received feedback for a client we no longer know. m=" + m);
+			return;
+		}
+		logger.finest(this + ": the pedigree of the requester: " + pedigree);
+		IntroductionRequest previousIntroduction = null;
+		try {
+			previousIntroduction = removePendingFeedbacksToReceive(introductionRequest);
+		} catch (IllegalArgumentException e) {
 			logger.severe(this + ": Received feedback for a transaction that is not pending feedback. m=" + m);
 			new Exception(this + ": Received feedback for a transaction that is not pending feedback. m=" + m)
 					.printStackTrace();
 			return;
 		}
-		Pedigree pedigree = getPedigree(introductionRequest.requester);
-		if (pedigree == null) {
-			// TODO should we manufacture an introducer-less pedigree?
-			logger.warning(this + ": Received feedback for a client we no longer know. m=" + m);
-			return;
-		}
-		logger.finest(this + ": the pedigree of the requester: " + pedigree);
 		reputationModule.applyFeedback(pedigree, m.getFeedback());
-		TimeAndIntroductionRequest tir = pendingFeedbacksToReceive.remove(introductionRequest);
-		if (tir == null) {
-			logger.fine(this + ": tir == null!");
-		} else if (tir.ir == null) {
-			logger.fine(this + ": tir.ir == null!");
-		}
-		IntroductionRequest previousIntroduction = (tir == null ? null : tir.ir);
 		if (previousIntroduction != null) {
 			AddressPair ap = new AddressPair(previousIntroduction.requester, previousIntroduction.destination);
-			if (!pendingFeedbacksToSend.containsKey(ap)) {
+			if (!pendingFeedbacksToSendContainsKey(ap)) {
 				logger.warning(this + ": no pending feedback! feedback=" + m + ", previousIntroduction="
-						+ previousIntroduction + ", outgoingIntroduction=" + introductionRequest);
-				// The feedback is too old. Ignore it.
+						+ previousIntroduction + ", outgoingIntroduction=" + introductionRequest); // The feedback is
+																									// too old. Ignore
+																									// it.
 				return;
 			}
-			pendingFeedbacksToSend.remove(ap);
 			if (pedigree == null || pedigree.getRequestSequence().length == 0) {
 				new Exception(this + ": Invariant Violation: we think we should forward " + m
 						+ ", but there is no previous pedigree. Pedigree=" + pedigree).printStackTrace();
@@ -471,8 +494,8 @@ public class Node implements EventProcessor, MessageReceiver {
 						.printStackTrace();
 				System.exit(-1);
 			}
-			if (aprioriNeighbors.contains(introductionRequest.requester)) {
-				// We are connected to the requester -- forward the feedback to them!
+			if (aprioriNeighbors.contains(introductionRequest.requester)) { // We are connected to the requester --
+																			// forward the feedback to them!
 				send(new FeedbackMessage(introductionRequest.requester, getAddress(), m.getSubject(), m.getFeedback(),
 						m.getTrigger()));
 			} else {
@@ -518,37 +541,16 @@ public class Node implements EventProcessor, MessageReceiver {
 			privateVPNClosed(nbr);
 			return;
 		}
-		Node thisNode = this;
 		if (e == NODE_MAINTENANCE_EVENT) {
-			Thread t = new Thread() {
-				public void run() {
-					long now = eventingSystem.getCurrentTime();
-					synchronized (pendingFeedbacksToSend) {
-						Iterator<AddressPair> iter = pendingFeedbacksToSend.keySet().iterator();
-						while (iter.hasNext()) {
-							AddressPair ap = iter.next();
-							TimeAndIntroductionRequest tNir = pendingFeedbacksToSend.get(ap);
-							if (now - tNir.time < FEEDBACK_EXPIRATION_TIME) {
-								break;
-							}
-							iter.remove();
-						}
-					}
-					synchronized (pendingFeedbacksToReceive) {
-						Iterator<IntroductionRequest> iter = pendingFeedbacksToReceive.keySet().iterator();
-						while (iter.hasNext()) {
-							IntroductionRequest ir = iter.next();
-							long time = pendingFeedbacksToReceive.get(ir).time;
-							if (now - time < FEEDBACK_EXPIRATION_TIME) {
-								break;
-							}
-							iter.remove();
-						}
-					}
-					eventingSystem.scheduleEventRelative(thisNode, e, MAINTENANCE_INTERVAL);
-				}
-			};
-			t.start();
+			int i = currentPendingFeedbacks;
+			i++;
+			if (i == pendingFeedbacksToSend.length) {
+				i = 0;
+			}
+			currentPendingFeedbacks = i;
+			pendingFeedbacksToSend[i].clear();
+			pendingFeedbacksToReceive[i].clear();
+			eventingSystem.scheduleEventRelative(this, e, MAINTENANCE_INTERVAL);
 		}
 		if (e instanceof Message) {
 			this.receive((Message) e);
@@ -564,7 +566,7 @@ public class Node implements EventProcessor, MessageReceiver {
 			implementation.getComms().send(message);
 			ackWaiters.put(message.getIdentifier(), sender);
 		} catch (IOException e) {
-			// sender.receive(StateMachine.FAILURE_EVENT);
+			sender.receive(StateMachine.FAILURE_EVENT);
 			// instead of failing immediately on an IOException, let the sender protocol
 			// retry.
 		}
@@ -752,17 +754,12 @@ public class Node implements EventProcessor, MessageReceiver {
 
 	public synchronized void addPendingFeedbackToReceive(IntroductionRequest introductionRequest,
 			IntroductionRequest requesterIntroduction) {
-		synchronized (pendingFeedbacksToReceive) {
-			pendingFeedbacksToReceive.put(introductionRequest,
-					new TimeAndIntroductionRequest(eventingSystem.getCurrentTime(), requesterIntroduction));
-		}
+		pendingFeedbacksToReceive[currentPendingFeedbacks].put(introductionRequest, requesterIntroduction);
 	}
 
 	public synchronized void addPendingFeedbackToSend(IntroductionRequest introductionRequest) {
-		synchronized (pendingFeedbacksToSend) {
-			pendingFeedbacksToSend.put(new AddressPair(introductionRequest.requester, introductionRequest.destination),
-					new TimeAndIntroductionRequest(eventingSystem.getCurrentTime(), introductionRequest));
-		}
+		pendingFeedbacksToSend[currentPendingFeedbacks].put(
+				new AddressPair(introductionRequest.requester, introductionRequest.destination), introductionRequest);
 	}
 
 	/**
@@ -773,14 +770,17 @@ public class Node implements EventProcessor, MessageReceiver {
 	 * @return
 	 */
 	protected IntroductionRequest getPendingFeedbackTo(InetAddress networkSrc, InetAddress networkDst) {
-		TimeAndIntroductionRequest tNir = null;
-		synchronized (pendingFeedbacksToSend) {
-			tNir = pendingFeedbacksToSend.get(new AddressPair(networkSrc, networkDst));
+		AddressPair srcDst = new AddressPair(networkSrc, networkDst);
+		for (int i = 0; i < pendingFeedbacksToSend.length; i++) {
+			int index = currentPendingFeedbacks - i;
+			if (index < 0) {
+				index += pendingFeedbacksToSend.length;
+			}
+			if (pendingFeedbacksToSend[index].containsKey(srcDst)) {
+				return pendingFeedbacksToSend[index].get(srcDst);
+			}
 		}
-		if (tNir == null) {
-			return null;
-		}
-		return tNir.ir;
+		return null;
 	}
 
 	public String addTimePrefix(String msg) {
@@ -807,7 +807,11 @@ public class Node implements EventProcessor, MessageReceiver {
 	}
 
 	public long getPendingFeedbacksSize() {
-		return pendingFeedbacksToReceive.size() + pendingFeedbacksToSend.size();
+		long total = 0;
+		for (int i = 0; i < pendingFeedbacksToSend.length; i++) {
+			total += pendingFeedbacksToSend[i].size() + pendingFeedbacksToReceive[i].size();
+		}
+		return total;
 	}
 
 }

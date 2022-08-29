@@ -18,9 +18,10 @@ public class Optimizer {
 			"snd.thold_ctlr.K", //
 			"snd.thold_ctlr.sensor_smoothing_alpha", //
 			"snd.thold_ctlr.tau_i", //
-			"snd.thold_ctlr.tau_t"//
+			"snd.thold_ctlr.tau_t", //
+			"snd.thold_ctlr.head_space"//
 	};
-	private static final boolean[] PROBABILITY_PROPERTIES = { true, false, true, false, false };
+	private static final boolean[] PROBABILITY_PROPERTIES = { true, false, true, false, false, false };
 	private Map<Properties, Float> props;
 	private Properties bestProps;
 	private float bestScore;

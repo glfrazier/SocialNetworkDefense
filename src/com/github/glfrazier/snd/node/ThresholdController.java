@@ -16,7 +16,7 @@ public class ThresholdController implements EventProcessor {
 	/** How frequently the threshold is adjusted. */
 	private static final long THRESHOLD_UPDATE_INTERVAL = 5000; // Every 5 seconds
 
-	private static final float HEAD_SPACE = 0.5f;
+	private float headSpace = 0.5f;
 
 	private Logger logger;
 
@@ -54,6 +54,7 @@ public class ThresholdController implements EventProcessor {
 		K = owner.getFloatProperty("snd.thold_ctlr.K");
 		tauI = owner.getFloatProperty("snd.thold_ctlr.tau_i");
 		tauT = owner.getFloatProperty("snd.thold_ctlr.tau_t");
+		headSpace = owner.getFloatProperty("snd.thold_ctlr.head_space");
 		sensorSmoothingAlpha = owner.getFloatProperty("snd.thold_ctlr.sensor_smoothing_alpha");
 		if (tauI == 0.0) {
 			throw new IllegalArgumentException("snd.thold_ctlr.tau_i cannot be zero.");
@@ -92,7 +93,7 @@ public class ThresholdController implements EventProcessor {
 		double healthError = targetHealth - health;
 		double unconstrainedThreshold = unconstrainedControllerUpdate(healthError, actuatorError);
 		double upperBound = 0.0;
-		double lowerBound = reputationModule.getLeastReputation() - HEAD_SPACE;
+		double lowerBound = reputationModule.getLeastReputation() - headSpace;
 //		if (healthError < 0 && threshold <= lowerBound) {
 //			healthError = 0;
 //		}

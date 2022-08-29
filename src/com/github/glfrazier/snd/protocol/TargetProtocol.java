@@ -100,6 +100,10 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 
 	protected String debugMessage;
 
+	private State previousTerminatedState;
+
+	private Exception previousException;
+
 	public TargetProtocol(Node target, IntroductionOfferMessage m, boolean verbose) {
 		super(target, m.getIntroductionRequest(), "Target Protocol", verbose);
 		this.introductionOffer = m;
@@ -297,13 +301,19 @@ public class TargetProtocol extends IntroductionProtocol implements StateMachine
 	private static State terminalState = new State("terminal state", terminalAction);
 
 	@Override
-	public void stateMachineEnded(StateMachine machine) {
+	public synchronized void stateMachineEnded(StateMachine machine) {
 		if (alreadyTerminated) {
-			System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nWe already hit a terminal state in " + machine
-					+ "!\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+			System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nWe already hit a terminal state in " + machine
+					+ "!\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+			System.err.println("current state = " + machine.getCurrentState());
+			new Exception("Current Stack Trace").printStackTrace();
+			System.err.println("previous terminal state = " + previousTerminatedState);
+			previousException.printStackTrace();
 			System.exit(-1);
 		}
 		alreadyTerminated = true;
+		previousTerminatedState = machine.getCurrentState();
+		previousException = new Exception("Previous Stack Trace");
 		if (acceptedWasSent) {
 			System.out.println("Accepted was sent!!");
 			System.exit(-1);

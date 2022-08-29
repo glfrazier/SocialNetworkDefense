@@ -160,7 +160,7 @@ public class ReputationModule {
 			adjustReputation(requests[i].introducer, dRep);
 			dRep /= 4;
 		}
-		System.out.println(owner.addTimePrefix(this + ": concerning " + addrToString(pedigree.getSubject()) + ": rep="
+		System.out.println(owner.addTimePrefix(this + ": adjusted the reputation of " + addrToString(pedigree.getSubject()) + ": rep="
 				+ userMap.get(pedigree.getSubject()).reputation + ", thold=" + thresholdController.getThreshold()));
 	}
 

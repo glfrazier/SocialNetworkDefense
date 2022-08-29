@@ -13,8 +13,9 @@ import com.github.glfrazier.event.Event;
 import com.github.glfrazier.event.EventProcessor;
 import com.github.glfrazier.event.EventingSystem;
 import com.github.glfrazier.snd.node.MessageReceiver;
+import com.github.glfrazier.snd.protocol.message.AckMessage;
+import com.github.glfrazier.snd.protocol.message.AddIntroductionRequestMessage;
 import com.github.glfrazier.snd.protocol.message.Message;
-import com.github.glfrazier.snd.util.AddressUtils.AddressPair;
 
 public class SimVPN implements EventProcessor {
 
@@ -54,15 +55,14 @@ public class SimVPN implements EventProcessor {
 		this.local = local;
 		this.remoteAddress = remote;
 		this.eventingSystem = eventingSystem;
-		AddressPair key = new AddressPair(local.getAddress(), remoteAddress);
-		Map<AddressPair, SimVPN> vpnMap = sim.getVpnMap();
+		Map<InetAddress, SimVPN> vpnMap = sim.getVpnMap(local.getAddress());
 		synchronized (vpnMap) {
-			SimVPN prior = vpnMap.get(key);
+			SimVPN prior = vpnMap.get(remoteAddress);
 			if (prior != null) {
 				LOGGER.severe(sim.addTimePrefix(this + ": being created when a duplicate already exists!"));
 				throw new IllegalStateException(this + ": being created when a duplicate already exists!");
 			}
-			vpnMap.put(key, this);
+			vpnMap.put(remoteAddress, this);
 		}
 		connect();
 	}
@@ -72,7 +72,7 @@ public class SimVPN implements EventProcessor {
 			return;
 		}
 		synchronized (this) {
-			remote = sim.getVpnMap().get(new AddressPair(remoteAddress, local.getAddress()));
+			remote = sim.getVpnMap(remoteAddress).get(local.getAddress());
 			if (remote == null) {
 				return;
 			}
@@ -85,7 +85,9 @@ public class SimVPN implements EventProcessor {
 			throw new IOException(sim.addTimePrefix(this + ": closed, cannot send " + m));
 		}
 		if (remote == null) {
-			throw new NotConnectedException(sim.addTimePrefix(this + ": is not yet connected, cannot send " + m));
+//			throw new NotConnectedException(sim.addTimePrefix(this + ": is not yet connected, cannot send " + m));
+			// silently fail!
+			return;
 		}
 		eventingSystem.scheduleEventRelative(remote, m, TRANSMISSION_LATENCY);
 	}
@@ -106,7 +108,7 @@ public class SimVPN implements EventProcessor {
 		if (LOGGER.isLoggable(FINE)) {
 			LOGGER.fine(sim.addTimePrefix(this + ": being closed."));
 		}
-		sim.getVpnMap().remove(new AddressPair(local.getAddress(), remoteAddress));
+		sim.getVpnMap(local.getAddress()).remove(remoteAddress);
 		if (remotelyInvoked) {
 			local.vpnClosed(remoteAddress);
 		} else {
@@ -128,7 +130,11 @@ public class SimVPN implements EventProcessor {
 			}
 		}
 		if (closed) {
-			LOGGER.info(sim.addTimePrefix(this + ": discarding " + e + " because VPN is closed."));
+			// IntroductionCompletedMessage acknowledgements often arrive after the VPN has
+			// closed. So do not bother to log such things. Same goes for AddIntroductionRequestMessage!
+			if (!(e instanceof AckMessage || e instanceof AddIntroductionRequestMessage)) {
+				LOGGER.info(sim.addTimePrefix(this + ": discarding " + e + " because VPN is closed."));
+			}
 			if (m != null && m.isVerbose()) {
 				System.out.println(sim.addTimePrefix(this + ": discarding " + e + " because VPN is closed."));
 			}

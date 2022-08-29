@@ -46,13 +46,15 @@ public class Simulation {
 	 */
 	private Set<Long> verboseMessages;
 	/** The map whereby VPN endpoints find each other. See SimVPN. */
-	private final Map<AddressPair, SimVPN> vpnMap = Collections.synchronizedMap(new HashMap<>());
+	private final Map<InetAddress, Map<InetAddress, SimVPN>> vpnMapOfMaps = Collections
+			.synchronizedMap(new HashMap<>());
 	/**
 	 * True if we want the TrafficGenerator instances to keep track of which
 	 * messages are not responded to.
 	 */
 	private boolean recordOutstandingMessages;
 	private List<Node> introducers;
+	private boolean running;
 
 	public Simulation(Properties properties) throws Exception {
 		this.properties = properties;
@@ -230,7 +232,7 @@ public class Simulation {
 			SimVPNManager factory = new SimVPNManager(this, eventingSystem, receiver);
 			appServers[index++] = receiver;
 			factory.createVPN(proxy.getAddress(), null);
-			receiver.attachToServer(getVpnMap().get(new AddressPair(receiver.getAddress(), proxy.getAddress())));
+			receiver.attachToServer(getVpnMap(receiver.getAddress()).get(proxy.getAddress()));
 			proxy.connectProxiedHost(receiverAddress, null);
 			lastReceiverAddress = receiverAddress;
 			// Create the TrafficReceiver's entry in the proxy lookup service
@@ -251,9 +253,9 @@ public class Simulation {
 		index = 0;
 		for (ProxyNode proxy : clients) {
 			TrafficGenerator generator = new TrafficGenerator(generatorAddress, this, eventingSystem);
-			SimVPNManager factory = new SimVPNManager(this, eventingSystem, generator);
-			factory.createVPN(proxy.getAddress(), null);
-			generator.attachToProxy(this.getVpnMap().get(new AddressPair(generator.getAddress(), proxy.getAddress())));
+			SimVPNManager vpnMgr = new SimVPNManager(this, eventingSystem, generator);
+			vpnMgr.createVPN(proxy.getAddress(), null);
+			generator.attachToProxy(this.getVpnMap(generatorAddress).get(proxy.getAddress()));
 			proxy.connectProxiedHost(generatorAddress, null);
 			// Create the TrafficGenerator's entry in the proxy lookup service
 			topology.setProxyFor(generatorAddress, proxy.getAddress());
@@ -414,8 +416,14 @@ public class Simulation {
 		eventingSystem.scheduleEvent(timeReporter, new Event() {
 		});
 	}
+	
+
+	private boolean getRunning() {
+		return running;
+	}
 
 	public void run() {
+		running = true;
 		addTimeReporter();
 		stats.startSimulation();
 		int numberOfThreads = getIntegerProperty("snd.sim.number_of_threads");
@@ -435,26 +443,29 @@ public class Simulation {
 			private long eventsDelivered;
 
 			public void run() {
-				while(true) {
+				while (true) {
 					try {
 						Thread.sleep(30000);
 					} catch (InterruptedException e) {
 						return;
 					}
-					for(int i=0; i<threads.length; i++) {
+					if (!getRunning()) {
+						return;
+					}
+					for (int i = 0; i < threads.length; i++) {
 						StackTraceElement[] x = threads[i].getStackTrace();
 						System.out.println(threads[i].getName());
-						for(int j=0; j<x.length; j++) {
+						for (int j = 0; j < x.length; j++) {
 							System.out.println("\t" + x[j].getFileName() + " @ " + x[j].getLineNumber());
 						}
 					}
 					long irSize = 0;
-					for(Node n : introducers) {
+					for (Node n : introducers) {
 						irSize += n.getPendingFeedbacksSize();
 					}
 					System.out.println("Free Memory = " + Runtime.getRuntime().freeMemory());
 					System.out.println("Total Memory = " + Runtime.getRuntime().totalMemory());
-					System.out.println("vpnMap.size() = " + vpnMap.size());
+					System.out.println("vpnMap.size() = " + vpnMapOfMaps.size());
 					long ted = eventingSystem.getTotalEventsDelivered();
 					System.out.println("#events processed = " + ted);
 					System.out.println("events in this period = " + (ted - eventsDelivered));
@@ -463,6 +474,7 @@ public class Simulation {
 					System.out.println("===============================");
 				}
 			}
+
 		};
 		t.setDaemon(true);
 		t.start();
@@ -473,6 +485,8 @@ public class Simulation {
 				System.err.println(threads[i].toString() + " was interrupted: " + e);
 			}
 		}
+		running = false;
+		t.interrupt();
 		printEvent("The simulation has ended.");
 		long eventsProcessed = eventingSystem.getTotalEventsDelivered();
 		properties.setProperty("events_processed", Long.toString(eventsProcessed));
@@ -550,8 +564,18 @@ public class Simulation {
 		return verboseMessages.contains(id);
 	}
 
-	public Map<AddressPair, SimVPN> getVpnMap() {
-		return vpnMap;
+	public Map<InetAddress, SimVPN> getVpnMap(InetAddress addr) {
+		Map<InetAddress, SimVPN> map = vpnMapOfMaps.get(addr);
+		if (map == null) {
+			synchronized (vpnMapOfMaps) {
+				map = vpnMapOfMaps.get(addr);
+				if (map == null) {
+					map = Collections.synchronizedMap(new HashMap<>());
+					vpnMapOfMaps.put(addr, map);
+				}
+			}
+		}
+		return map;
 	}
 
 	public boolean recordOutstandingMessages() {

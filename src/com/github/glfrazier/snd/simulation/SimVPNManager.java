@@ -19,16 +19,20 @@ public class SimVPNManager implements VPNManager {
 
 	private Simulation sim;
 
+	private Map<InetAddress, SimVPN> vpnMap;
+
 	public SimVPNManager(Simulation sim, EventingSystem es, MessageReceiver local) {
 		this.eventingSystem = es;
 		this.local = local;
 		this.sim = sim;
+		this.vpnMap = sim.getVpnMap(local.getAddress());
 	}
 
 	@Override
 	public synchronized void createVPN(InetAddress remote, Object keyingMaterial) throws IOException {
 		try {
-		SimVPN vpn = new SimVPN(sim, local, remote, eventingSystem);
+			// SimVPN vpn =
+			new SimVPN(sim, local, remote, eventingSystem);
 		} catch (IllegalStateException e) {
 			// Let's see this, but in general we'll ignore it(?). The VPN already exists...
 			e.printStackTrace();
@@ -37,13 +41,17 @@ public class SimVPNManager implements VPNManager {
 
 	@Override
 	public synchronized void closeVPN(InetAddress remote) {
-		SimVPN vpn = sim.getVpnMap().get(new AddressPair(local.getAddress(), remote));
+		SimVPN vpn = vpnMap.get(remote);
 		if (vpn == null)
 			return;
 		// A node will close a VPN at the same time that an ACK is being sent. So, we
 		// delay the actual closing of the VPN by one time unit. This does not prevent a
 		// host from creating a new VPN to the same neighbor in the meantime.
 		eventingSystem.scheduleEventRelative(vpn, SimVPN.LOCAL_CLOSE_VPN_EVENT, 1);
+	}
+
+	public String addTimePrefix(String string) {
+		return sim.addTimePrefix(string);
 	}
 
 }
