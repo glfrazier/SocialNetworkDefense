@@ -62,6 +62,8 @@ public class SNDPMessageTransmissionProtocol extends StateMachine {
 		}
 		this.addTransition(new Transition(transmissionState, getTimeoutEvent().getClass(), transmissionState));
 		this.addTransition(new Transition(transmissionState, AckMessage.class, successState));
+		// An IOException causes the state machine to transition directly to failure,
+		// instead of trying MAX_ATTEMPTS times.
 		this.addTransition(new Transition(transmissionState, FAILURE_EVENT.getClass(), failureState));
 
 		this.setStartState(transmissionState);

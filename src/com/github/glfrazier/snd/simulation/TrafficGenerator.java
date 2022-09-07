@@ -92,7 +92,9 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		if (content.isAttack) {
 			stats.responseToBadMessageReceived();
 		} else {
-			stats.responseToGoodMessageReceived();
+			if (!isAttacker() || !sim.isVictim(m.getSrc())) {
+				stats.responseToGoodMessageReceived();
+			}
 		}
 		if (sim.verbose) {
 			sim.printEvent(this + " received " + m);
@@ -102,7 +104,7 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 	@Override
 	public void process(Event e, EventingSystem es, long t) {
 		if (e instanceof Message) {
-			receive((Message)e);
+			receive((Message) e);
 			return;
 		}
 
@@ -119,7 +121,12 @@ public class TrafficGenerator implements MessageReceiver, EventProcessor {
 		if (content.isAttack) {
 			stats.badMessageSent();
 		} else {
-			stats.goodMessageSent();
+			if (isAttacker() && sim.isVictim(mmd.destination)) {
+				// we do not count good messages from an attacker to a victim, as the whole
+				// point is to isolate the attackers from the victims
+			} else {
+				stats.goodMessageSent();
+			}
 		}
 
 		// send a message

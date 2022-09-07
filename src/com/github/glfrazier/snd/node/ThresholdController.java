@@ -14,7 +14,7 @@ import com.github.glfrazier.event.EventingSystem;
 public class ThresholdController implements EventProcessor {
 
 	/** How frequently the threshold is adjusted. */
-	private static final long THRESHOLD_UPDATE_INTERVAL = 5000; // Every 5 seconds
+	public static final long THRESHOLD_UPDATE_INTERVAL = 5000; // Every 5 seconds
 
 	private float headSpace = 0.5f;
 

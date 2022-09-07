@@ -105,6 +105,7 @@ public class Node implements EventProcessor, MessageReceiver {
 	protected static final Event NODE_MAINTENANCE_EVENT = new Event() {
 		private final String name = "Node Maintenance Event";
 
+		@Override
 		public String toString() {
 			return name;
 		}
@@ -115,8 +116,8 @@ public class Node implements EventProcessor, MessageReceiver {
 	 * introduction.
 	 */
 	// TODO These constants should all be set by properties!
-	protected static final long FEEDBACK_EXPIRATION_TIME = // 8 * 60 *
-			60 * 1000; // one minute
+	protected static final long FEEDBACK_EXPIRATION_TIME = 60 * 1000; // one minute// 8 * 60 *
+
 	private static final long MAINTENANCE_INTERVAL = FEEDBACK_EXPIRATION_TIME / 100;
 	private static final int MAX_INTRODUCED_NEIGHBORS = 100;
 
@@ -140,6 +141,23 @@ public class Node implements EventProcessor, MessageReceiver {
 
 	private Long verboseOnIntroductionRequest;
 
+	/**
+	 * This method pulls the initialization of the pending feedbacks fields out of
+	 * the body of the constructor and puts them into their own method. The purpose
+	 * is to isolate the @SuppressWarnings directive to just these assignments;
+	 * without this method, one is forced to suppress warnings for the entire
+	 * constructor. Given that this constructor will be invoked exactly once in the
+	 * lifetime of a given network node, we are not concerned about performance. (Of
+	 * course, one cannot avoid awareness of the JIT compiler's inclination to
+	 * in-line methods such as this, which renders concern over an unnecessary
+	 * method invocation moot.)
+	 */
+	@SuppressWarnings("unchecked")
+	private void inlinedInitializationInConstructor() {
+		this.pendingFeedbacksToReceive = new Map[(int) (FEEDBACK_EXPIRATION_TIME / MAINTENANCE_INTERVAL) + 1];
+		this.pendingFeedbacksToSend = new Map[(int) (FEEDBACK_EXPIRATION_TIME / MAINTENANCE_INTERVAL) + 1];
+	}
+
 	public Node(InetAddress addr, Implementation implementation, EventingSystem eventingSystem, Properties properties) {
 		this.properties = properties;
 		if (properties == null || properties.isEmpty()) {
@@ -154,9 +172,9 @@ public class Node implements EventProcessor, MessageReceiver {
 		this.introducedNeighbors = new LinkedHashMap<>();
 
 		this.verbose = getBooleanProperty("snd.node.verbose", "false");
+		// See #inlineThisInConstructor()
+		inlinedInitializationInConstructor();
 
-		this.pendingFeedbacksToReceive = new Map[(int) (FEEDBACK_EXPIRATION_TIME / MAINTENANCE_INTERVAL) + 1];
-		this.pendingFeedbacksToSend = new Map[(int) (FEEDBACK_EXPIRATION_TIME / MAINTENANCE_INTERVAL) + 1];
 		for (int i = 0; i < pendingFeedbacksToReceive.length; i++) {
 			pendingFeedbacksToReceive[i] = Collections.synchronizedMap(new HashMap<>());
 			pendingFeedbacksToSend[i] = Collections.synchronizedMap(new HashMap<>());
@@ -250,7 +268,8 @@ public class Node implements EventProcessor, MessageReceiver {
 		if (!aprioriNeighbors.contains(from) && !introducedNeighbors.containsKey(from)) {
 			// This node is in the process of closing the VPN. Probably. So, log that we are
 			// dropping this message, and then drop it.
-			logger.warning(addTimePrefix(this + ": received <" + m + "> on a VPN that does not exist. Ignoring it."));
+			logger.warning(addTimePrefix(this + ": received <" + m + "> (from <" + addrToString(from)
+					+ "> on a VPN that does not exist. Ignoring it.\napriori neighbors: " + aprioriNeighbors));
 			if (from.equals(address)) {
 				new Exception("We sent " + m + " to ourselves!").printStackTrace();
 				System.exit(-1);
@@ -265,8 +284,7 @@ public class Node implements EventProcessor, MessageReceiver {
 		try {
 			implementation.getComms().send(ack);
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			// We don't really care about failed ack transmissions
 		}
 		IntroductionMessage im = (IntroductionMessage) m;
 		if (verboseOnIntroductionRequest != null && verboseOnIntroductionRequest == im.getIntroductionRequest().nonce) {
@@ -355,7 +373,8 @@ public class Node implements EventProcessor, MessageReceiver {
 		}
 		IntroductionRequest requesterIntroduction = null;
 //		XXXXXXXXXXXXXX
-//		Race Condition! The introduction request got here before the ACK.
+//		Race Condition! The introduction request got here before the ACK. 
+		// (Before what ACK? I wish I had written more text here; I do not remember the mechanics of this bug...)
 //		Solution: include the requesterIntroduction (the preceding introduction request)
 //		in the next introduction request, rather than counting on the introducer being
 //		able to find the introduction in its tables.
@@ -454,7 +473,7 @@ public class Node implements EventProcessor, MessageReceiver {
 		if (!pendingFeedbacksToReceive[0].containsKey(introductionRequest)) {
 		}
 		Pedigree pedigree = getPedigree(introductionRequest.requester);
-		if (pedigree == null) { // TODO should we manufacture an introducer-less pedigree?
+		if (pedigree == null) {
 			logger.warning(this + ": Received feedback for a client we no longer know. m=" + m);
 			return;
 		}
@@ -515,7 +534,7 @@ public class Node implements EventProcessor, MessageReceiver {
 		try {
 			implementation.getComms().send(m);
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
+			// Do not do anything if a user message transmission fails
 			e.printStackTrace();
 		}
 	}
@@ -567,8 +586,6 @@ public class Node implements EventProcessor, MessageReceiver {
 			ackWaiters.put(message.getIdentifier(), sender);
 		} catch (IOException e) {
 			sender.receive(StateMachine.FAILURE_EVENT);
-			// instead of failing immediately on an IOException, let the sender protocol
-			// retry.
 		}
 	}
 
@@ -638,8 +655,9 @@ public class Node implements EventProcessor, MessageReceiver {
 			InetAddress nbr) {
 		Set<IntroductionRequest> requests = introducedNeighbors.get(nbr);
 		if (requests == null) {
-			logger.severe(this + ": Removing an introduction request from a non-existant VPN!");
-			System.exit(-1);
+			// This probably should never happen.
+			logger.warning(this + ": attempted to remove <" + introductionRequest + "> from a non-existant VPN!");
+			return;
 		}
 		if (verbose) {
 			System.out.println(this + ": Removing IR " + introductionRequest + " from VPN to " + addrToString(nbr));
@@ -670,7 +688,6 @@ public class Node implements EventProcessor, MessageReceiver {
 	}
 
 	public Serializable generateKeyingMaterial() {
-		// TODO Auto-generated method stub
 		return "keying material";
 	}
 
@@ -708,6 +725,8 @@ public class Node implements EventProcessor, MessageReceiver {
 			}
 		}
 		while (introducedNeighbors.size() > MAX_INTRODUCED_NEIGHBORS) {
+			logger.fine(this
+					.addTimePrefix(this + ": deleting oldest VPNs due to exceeding MAX_INTRODUCED_NEIGHBORS!!"));
 			Iterator<InetAddress> iter = introducedNeighbors.keySet().iterator();
 			InetAddress n = iter.next();
 			removeAllIntroductionRequestsFromVPN(n);

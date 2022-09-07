@@ -44,7 +44,6 @@ public class TrafficReceiver implements MessageReceiver {
 		return address;
 	}
 
-
 	public void receive(Message m) {
 		if (m instanceof AckMessage) {
 			// ignore acks!
@@ -59,7 +58,9 @@ public class TrafficReceiver implements MessageReceiver {
 				response = new FeedbackMessage(vpnToProxy.remoteAddress, address, m.getSrc(), Feedback.BAD, m);
 			}
 		} else {
-			stats.goodMessageReceived();
+			if (!sim.isAttacker(m.getSrc()) || !sim.isVictim(address)) {
+				stats.goodMessageReceived();
+			}
 			if (random.nextFloat() < falsePositiveRate) {
 				// It was not an attack, but we thought it was
 				response = new FeedbackMessage(vpnToProxy.remoteAddress, address, m.getSrc(), Feedback.BAD, m);
@@ -98,7 +99,7 @@ public class TrafficReceiver implements MessageReceiver {
 	@Override
 	public void process(Event e, EventingSystem eventingSystem, long t) {
 		if (e instanceof Message) {
-			receive((Message)e);
+			receive((Message) e);
 			return;
 		}
 	}

@@ -39,6 +39,8 @@ public class Simulation {
 	private long endTime;
 	private long warmupTime;
 	private TrafficReceiver[] victims;
+	private Set<InetAddress> victimAddressSet;
+	private Set<InetAddress> attackerAddressSet;
 	public boolean verbose;
 	/**
 	 * A list of message IDs that will trigger verbose processing. Useful for
@@ -278,9 +280,11 @@ public class Simulation {
 			for (TrafficGenerator tg : appClients) {
 				candidates.add(tg);
 			}
+			attackerAddressSet = new HashSet<>();
 			for (int i = 0; i < numberOfAttackers; i++) {
 				TrafficGenerator attacker = candidates.remove(simRandom.nextInt(candidates.size()));
 				attacker.setAttacker();
+				attackerAddressSet.add(attacker.getAddress());
 			}
 		}
 
@@ -301,6 +305,10 @@ public class Simulation {
 				ltr.add(victim);
 			}
 			victims = (TrafficReceiver[]) ltr.toArray(new TrafficReceiver[0]);
+			victimAddressSet = new HashSet<>();
+			for(TrafficReceiver tr : victims) {
+				victimAddressSet.add(tr.getAddress());
+			}
 		}
 		// construct the statistics-gathering module
 
@@ -588,6 +596,15 @@ public class Simulation {
 
 	public Properties getProperties() {
 		return properties;
+	}
+
+
+	public boolean isVictim(InetAddress destination) {
+		return victimAddressSet.contains(destination);
+	}
+
+	public boolean isAttacker(InetAddress addr) {
+		return attackerAddressSet.contains(addr);
 	}
 
 }

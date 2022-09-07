@@ -20,15 +20,19 @@ public class ReputationModule {
 
 	private static final Logger LOGGER = Logger.getLogger(ReputationModule.class.getName());
 
-	private static final long MINIMUM_FADE_INTERVAL = 10000; // 10 seconds
+	private static final long FADE_INTERVAL = ThresholdController.THRESHOLD_UPDATE_INTERVAL; // 10 seconds
 	private static final long ONE_DAY = 24 * 60 * 60 * 1000; // milliseconds in a day
 	@SuppressWarnings("unused")
 	private static final long ONE_WEEK = 7 * ONE_DAY; // milliseconds in a week
 	@SuppressWarnings("unused")
 	private static final float ONE_DAY_HALF_LIFE = 8e-09f; // e^(-1 * ONE_DAY * ONE_DAY_HALF_LIFE) ~= 0.5
 	private static final float ONE_WEEK_HALF_LIFE = 1.146e-09f; // e^(-1 * ONE_WEEK * ONE_WEEK_HALF_LIFE) ~= 0.5
+	
 	private static final float FADE_RATE = ONE_WEEK_HALF_LIFE;
 	private static final float EPSILON = 0.001f;
+	
+
+	private static final double FAST_FADE_MULTIPLIER = -1 * FADE_RATE * FADE_INTERVAL;
 
 	private static final float BAD_FEEDBACK_DECREMENT_BASE = -1;
 	private static final float NOMINAL_FEEDBACK_INCREMENT_BASE = 0.0f;
@@ -160,8 +164,9 @@ public class ReputationModule {
 			adjustReputation(requests[i].introducer, dRep);
 			dRep /= 4;
 		}
-		System.out.println(owner.addTimePrefix(this + ": adjusted the reputation of " + addrToString(pedigree.getSubject()) + ": rep="
-				+ userMap.get(pedigree.getSubject()).reputation + ", thold=" + thresholdController.getThreshold()));
+		System.out.println(owner.addTimePrefix(this + ": adjusted the reputation of "
+				+ addrToString(pedigree.getSubject()) + ": rep=" + userMap.get(pedigree.getSubject()).reputation
+				+ ", thold=" + thresholdController.getThreshold()));
 	}
 
 	private void adjustReputation(InetAddress e, float dRep) {
@@ -198,27 +203,39 @@ public class ReputationModule {
 
 		public synchronized void adjustReputation(float dRep) {
 			timeOfLastFeedback = eventingSystem.getCurrentTime();
-			fade(); // apply the fade
+			// fade(); // apply the fade
 			reputation += dRep;
 			if (reputation > MAX_REPUTATION) {
 				reputation = MAX_REPUTATION;
 			}
 		}
 
-		private void fade() {
+//		private void fade() {
+//			if (reputation < 0) {
+//				// only fade negative reputations
+//				long now = eventingSystem.getCurrentTime();
+//				float fadeTime = now - timeLastFaded;
+//				if (fadeTime > MINIMUM_FADE_INTERVAL) {
+//					reputation *= Math.exp(-1 * FADE_RATE * fadeTime);
+//					timeLastFaded = now;
+//				}
+//			}
+//		}
+
+		/**
+		 * What makes fastFade() "fast" is that the FADE_RATE (how quickly the
+		 * reputations move towards zero over time) and the FADE_INTERVAL (how long it
+		 * has been since fastFade() was last invoked) are both constants.
+		 */
+		public void fastFade() {
 			if (reputation < 0) {
-				// only fade negative reputations
-				long now = eventingSystem.getCurrentTime();
-				float fadeTime = now - timeLastFaded;
-				if (fadeTime > MINIMUM_FADE_INTERVAL) {
-					reputation *= Math.exp(-1 * FADE_RATE * fadeTime);
-					timeLastFaded = now;
-				}
+				reputation *= Math.exp( FAST_FADE_MULTIPLIER    // == -1 * FADE_RATE * FADE_INTERVAL
+						);
 			}
 		}
 
 		public synchronized float getReputation() {
-			fade();
+			// fade();
 			return reputation;
 		}
 
@@ -244,6 +261,17 @@ public class ReputationModule {
 		}
 	}
 
+	/**
+	 * This method is *ONLY* invoked by
+	 * {@link ThresholdController#updateThreshold()}, which in turn is invoked once
+	 * every {@link ThresholdController#THRESHOLD_UPDATE_INTERVAL} milliseconds (as
+	 * of this moment, once very 10 seconds). updateThreshold() must obtain the
+	 * minimum reputation to know how far it can degrade towards zero. At the point
+	 * where we are calculating the minimum reputation, we are degrading ALL of the
+	 * reputations towards zero.
+	 * 
+	 * @return
+	 */
 	public float getLeastReputation() {
 		// TODO make this a less-expensive operation by keeping the Users in bins, so we
 		// only need to sort the lowest bin. Actually, we just need one bin that has the
@@ -253,7 +281,10 @@ public class ReputationModule {
 			return EPSILON;
 		}
 		TreeSet<Entity> sorted = new TreeSet<>();
-		sorted.addAll(userMap.values());
+		for (Entity e : userMap.values()) {
+			e.fastFade();
+			sorted.add(e);
+		}
 		return sorted.iterator().next().getReputation();
 	}
 
